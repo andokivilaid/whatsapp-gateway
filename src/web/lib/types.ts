@@ -103,6 +103,7 @@ export type WebhookDelivery = {
   status: 'pending' | 'delivering' | 'delivered' | 'retrying' | 'failed' | 'dead' | string;
   attemptCount: number;
   lastStatusCode: number | null;
+  lastResponse: string | null;
   lastError: string | null;
   deliveredAt: string | null;
   nextAttemptAt: string | null;

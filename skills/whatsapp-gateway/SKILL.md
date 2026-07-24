@@ -34,6 +34,11 @@ Convenience mutation aliases are `POST /v1/accounts/{accountId}/messages`, `POST
 
 Webhook routes are `GET /v1/webhook-event-types`, `GET|POST /v1/webhook-endpoints`, `GET|PATCH|DELETE /v1/webhook-endpoints/{endpointId}`, `POST /v1/webhook-endpoints/{endpointId}/rotate-secret`, `GET /v1/webhook-deliveries`, `GET /v1/webhook-deliveries/{deliveryId}`, and `POST /v1/webhook-deliveries/{deliveryId}/replay`.
 
+Webhook delivery list and detail responses include `lastError`, `lastStatusCode`,
+`lastResponse`, `attemptCount`, and `nextAttemptAt`. Use these fields to report
+the receiver's exact rejection or transport failure and the current retry state;
+do not reduce a failed delivery to only `retrying` or `failed`.
+
 Discovery routes are `GET /v1/skill.md`, `GET /v1/capabilities.md`, `GET /openapi.json`, and `GET /docs`.
 
 Ask before sending messages, creating groups, changing participants, or disconnecting unless explicitly requested. Never expose API keys, pairing QR codes, pairing codes, or webhook secrets.

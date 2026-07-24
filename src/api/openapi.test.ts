@@ -35,4 +35,21 @@ describe('OpenAPI document', () => {
     expect(openApiDocument.components.schemas.CommandEnvelope.properties).toHaveProperty('status');
     expect(openApiDocument.components.schemas.CommandEnvelope.properties).toHaveProperty('result');
   });
+
+  it('documents webhook failure diagnostics returned to API-key callers', () => {
+    const list = openApiDocument.paths['/v1/webhook-deliveries'].get;
+    expect(list.responses['200'].content['application/json'].schema)
+      .toEqual({ $ref: '#/components/schemas/WebhookDeliveryPage' });
+
+    const summary = openApiDocument.components.schemas.WebhookDeliverySummary;
+    expect(summary.properties).toHaveProperty('lastError');
+    expect(summary.properties).toHaveProperty('lastStatusCode');
+    expect(summary.properties).toHaveProperty('lastResponse');
+    expect(summary.properties).toHaveProperty('attemptCount');
+    expect(summary.properties).toHaveProperty('nextAttemptAt');
+
+    const detail = openApiDocument.paths['/v1/webhook-deliveries/{deliveryId}'].get;
+    expect(detail.responses['200'].content['application/json'].schema)
+      .toEqual({ $ref: '#/components/schemas/WebhookDeliveryDetail' });
+  });
 });

@@ -76,6 +76,74 @@ export const openApiDocument = {
         error: { type: 'string' },
         message: { type: 'string' },
       }, ['error', 'message']),
+      WebhookDeliverySummary: object({
+        id: { type: 'string', examples: ['whd_0123456789abcdef'] },
+        endpointId: { type: 'string', examples: ['whe_0123456789abcdef'] },
+        eventId: { type: 'string', examples: ['evt_0123456789abcdef'] },
+        status: {
+          type: 'string',
+          enum: ['pending', 'processing', 'delivered', 'retrying', 'dead_letter'],
+          description: 'Current durable delivery state.',
+        },
+        attemptCount: { type: 'integer', minimum: 0, description: 'Number of HTTP attempts already made.' },
+        nextAttemptAt: {
+          type: ['string', 'null'],
+          format: 'date-time',
+          description: 'When a pending or retrying delivery is next eligible to run.',
+        },
+        lastStatusCode: {
+          type: ['integer', 'null'],
+          minimum: 100,
+          maximum: 599,
+          description: 'Most recent receiver HTTP status, when an HTTP response was received.',
+        },
+        lastResponse: {
+          type: ['string', 'null'],
+          description: 'Most recent receiver response body, capped at 4096 characters.',
+        },
+        lastError: {
+          type: ['string', 'null'],
+          description: 'Exact latest failure reason, including receiver status and response body or the transport error.',
+        },
+        deliveredAt: { type: ['string', 'null'], format: 'date-time' },
+        createdAt: { type: 'string', format: 'date-time' },
+        updatedAt: { type: 'string', format: 'date-time' },
+        endpoint: object({
+          id: { type: 'string' },
+          url: { type: 'string', format: 'uri' },
+          description: { type: ['string', 'null'] },
+        }, ['id', 'url', 'description']),
+        event: object({
+          id: { type: 'string' },
+          type: { type: 'string', examples: ['message.received'] },
+          accountId: { type: 'string' },
+          occurredAt: { type: 'string', format: 'date-time' },
+        }, ['id', 'type', 'accountId', 'occurredAt']),
+      }, [
+        'id', 'endpointId', 'eventId', 'status', 'attemptCount', 'nextAttemptAt',
+        'lastStatusCode', 'lastResponse', 'lastError', 'deliveredAt', 'createdAt',
+        'updatedAt', 'endpoint', 'event',
+      ]),
+      WebhookDeliveryDetail: {
+        allOf: [
+          { $ref: '#/components/schemas/WebhookDeliverySummary' },
+          object({
+            event: object({
+              id: { type: 'string' },
+              tenantId: { type: 'string' },
+              accountId: { type: 'string' },
+              sequence: { type: 'integer', minimum: 0 },
+              type: { type: 'string', examples: ['message.received'] },
+              data: { type: 'object', additionalProperties: true },
+              occurredAt: { type: 'string', format: 'date-time' },
+            }, ['id', 'tenantId', 'accountId', 'sequence', 'type', 'data', 'occurredAt']),
+          }, ['event']),
+        ],
+      },
+      WebhookDeliveryPage: object({
+        data: { type: 'array', items: { $ref: '#/components/schemas/WebhookDeliverySummary' } },
+        next_before: { type: ['string', 'null'], format: 'date-time' },
+      }, ['data', 'next_before']),
     },
   },
   security: [{ apiKey: [] }, { session: [] }],
@@ -357,14 +425,33 @@ export const openApiDocument = {
       },
     },
     '/v1/webhook-deliveries': {
-      get: { tags: ['Webhooks'], summary: 'Filter and paginate webhook deliveries', parameters: [
-        { name: 'endpoint_id', in: 'query', schema: { type: 'string' } }, { name: 'account_id', in: 'query', schema: { type: 'string' } },
-        { name: 'type', in: 'query', schema: { type: 'string' } }, { name: 'status', in: 'query', schema: { type: 'string' } },
-        { name: 'before', in: 'query', schema: { type: 'string', format: 'date-time' } }, { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 500, default: 100 } },
-      ], responses: { '200': { description: 'Deliveries and pagination cursor' } } },
+      get: {
+        tags: ['Webhooks'],
+        summary: 'Filter and paginate webhook deliveries',
+        description:
+          'Returns delivery diagnostics directly to callers with webhooks:read permission. Inspect lastError for the exact failure, lastStatusCode and lastResponse for the receiver response, and attemptCount/nextAttemptAt for retry progress.',
+        parameters: [
+          { name: 'endpoint_id', in: 'query', schema: { type: 'string' } }, { name: 'account_id', in: 'query', schema: { type: 'string' } },
+          { name: 'type', in: 'query', schema: { type: 'string' } }, { name: 'status', in: 'query', schema: { type: 'string', enum: ['pending', 'processing', 'delivered', 'retrying', 'dead_letter'] } },
+          { name: 'before', in: 'query', schema: { type: 'string', format: 'date-time' } }, { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 500, default: 100 } },
+        ],
+        responses: {
+          '200': jsonResponse('Deliveries, failure diagnostics, and pagination cursor', { $ref: '#/components/schemas/WebhookDeliveryPage' }),
+        },
+      },
     },
     '/v1/webhook-deliveries/{deliveryId}': {
-      get: { tags: ['Webhooks'], summary: 'Inspect one webhook delivery and event', parameters: [deliveryParameter], responses: { '200': { description: 'Delivery details' }, '404': { description: 'Not found' } } },
+      get: {
+        tags: ['Webhooks'],
+        summary: 'Inspect one webhook delivery, failure, and full event',
+        description:
+          'Returns the exact latest delivery error and receiver response plus the complete normalized event payload that was sent.',
+        parameters: [deliveryParameter],
+        responses: {
+          '200': jsonResponse('Delivery diagnostics and full event payload', { $ref: '#/components/schemas/WebhookDeliveryDetail' }),
+          '404': { description: 'Not found' },
+        },
+      },
     },
     '/v1/webhook-deliveries/{deliveryId}/replay': {
       post: { tags: ['Webhooks'], summary: 'Replay a webhook delivery', parameters: [deliveryParameter], responses: { '200': { description: 'Delivery reset to pending' }, '404': { description: 'Not found' } } },

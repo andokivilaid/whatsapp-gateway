@@ -74,6 +74,14 @@ export function WebhookDeliveriesPage() {
                   {delivery.attemptCount > 0 && ` · ${delivery.attemptCount} attempt${delivery.attemptCount > 1 ? 's' : ''}`}
                   {delivery.lastStatusCode != null && ` · HTTP ${delivery.lastStatusCode}`}
                 </p>
+                {delivery.lastError && (
+                  <details className="mt-2 text-xs">
+                    <summary className="cursor-pointer text-destructive">Why this delivery failed</summary>
+                    <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-muted p-2 font-mono text-foreground">
+                      {delivery.lastError}
+                    </pre>
+                  </details>
+                )}
               </div>
               {delivery.status !== 'delivered' && (
                 <Button
