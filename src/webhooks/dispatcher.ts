@@ -13,6 +13,15 @@ export function webhookBackoffMs(attempt: number, random = Math.random): number 
   return exponential + Math.floor(random() * Math.max(250, exponential * 0.2));
 }
 
+type WebhookDeliveryError = Error & { statusCode: number; responseBody: string };
+
+export function webhookHttpError(statusCode: number, responseBody: string): WebhookDeliveryError {
+  const error = new Error(`Webhook returned HTTP ${statusCode}: ${responseBody}`) as WebhookDeliveryError;
+  error.statusCode = statusCode;
+  error.responseBody = responseBody;
+  return error;
+}
+
 export async function claimWebhookDelivery() {
   const claimed = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
     WITH candidate AS (
@@ -155,12 +164,12 @@ export class WebhookDispatcher {
         });
         return;
       }
-      const failure = new Error(`Webhook returned HTTP ${response.status}: ${responseBody}`);
-      (failure as { statusCode?: number }).statusCode = response.status;
-      throw failure;
+      throw webhookHttpError(response.status, responseBody);
     } catch (error) {
       const attempts = delivery.attemptCount;
-      const statusCode = (error as { statusCode?: number } | undefined)?.statusCode;
+      const deliveryError = error as { statusCode?: number; responseBody?: string } | undefined;
+      const statusCode = deliveryError?.statusCode;
+      const responseBody = deliveryError?.responseBody;
       // Retrying a permanent rejection cannot succeed, and the attempts are not
       // free: they occupy the same bounded worker pool as live traffic. A
       // secret mismatch once produced 3,854 retrying deliveries that starved
@@ -172,6 +181,8 @@ export class WebhookDispatcher {
         data: {
           status: dead ? 'dead_letter' : 'retrying',
           nextAttemptAt: new Date(Date.now() + webhookBackoffMs(attempts)),
+          lastStatusCode: statusCode ?? null,
+          lastResponse: responseBody ?? null,
           lastError: error instanceof Error ? error.message : String(error),
         },
       });

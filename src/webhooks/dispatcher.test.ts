@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { webhookBackoffMs, isPermanentRejection } from './dispatcher.js';
+import { webhookBackoffMs, webhookHttpError, isPermanentRejection } from './dispatcher.js';
 
 describe('webhook retry backoff', () => {
   it('grows exponentially and caps at one hour', () => {
@@ -28,5 +28,14 @@ describe('permanent rejections do not consume retry capacity', () => {
     for (const code of [404, 408, 429, 500, 502, 503, 504, undefined]) {
       expect(isPermanentRejection(code)).toBe(false);
     }
+  });
+});
+
+describe('receiver failure diagnostics', () => {
+  it('keeps the HTTP status and response body as structured fields', () => {
+    const error = webhookHttpError(409, '{"error":"Webhook secret is not configured"}');
+    expect(error.statusCode).toBe(409);
+    expect(error.responseBody).toBe('{"error":"Webhook secret is not configured"}');
+    expect(error.message).toContain('Webhook returned HTTP 409');
   });
 });

@@ -208,7 +208,10 @@ app.post('/v1/webhook-deliveries/:deliveryId/replay', requireAuth({ resource: 'w
   if (!delivery) throw new HTTPException(404, { message: 'Webhook delivery not found' });
   await prisma.webhookDelivery.update({
     where: { id: delivery.id },
-    data: { status: 'pending', attemptCount: 0, nextAttemptAt: new Date(), lastError: null, deliveredAt: null },
+    data: {
+      status: 'pending', attemptCount: 0, nextAttemptAt: new Date(),
+      lastStatusCode: null, lastResponse: null, lastError: null, deliveredAt: null,
+    },
   });
   return context.json({ id: delivery.id, status: 'pending' });
 });
