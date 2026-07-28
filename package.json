@@ -15,7 +15,8 @@
     "access": "public"
   },
   "bin": {
-    "wag": "dist/server/cli.js"
+    "wag": "dist/server/cli.js",
+    "wag-mcp": "dist/server/mcp-stdio.js"
   },
   "files": [
     "dist/server",
@@ -39,7 +40,7 @@
     "dev:webhooks": "RUNTIME_ROLE=webhooks tsx watch src/main.ts",
     "dev:web": "vite",
     "build": "pnpm db:generate && pnpm build:server && pnpm build:web",
-    "build:server": "tsup src/main.ts src/cli.ts src/scripts/e2e.ts src/scripts/platinum-android-e2e.ts --format esm --platform node --target node22 --out-dir dist/server --splitting false --sourcemap",
+    "build:server": "tsup src/main.ts src/cli.ts src/mcp-stdio.ts src/scripts/e2e.ts src/scripts/platinum-android-e2e.ts --format esm --platform node --target node22 --out-dir dist/server --splitting false --sourcemap",
     "build:web": "vite build",
     "start": "node dist/server/main.js",
     "start:api": "RUNTIME_ROLE=api node dist/server/main.js",
@@ -55,6 +56,7 @@
     "lint": "eslint .",
     "e2e": "tsx src/scripts/e2e.ts",
     "e2e:platinum-android": "ANDROID_RUNTIME_PROVIDER=platinum tsx src/scripts/platinum-android-e2e.ts",
+    "mcp": "tsx src/mcp-stdio.ts",
     "smoke:curl": "bash scripts/smoke.sh",
     "skill:validate": "node scripts/validate-skill.mjs",
     "wag": "tsx src/cli.ts"
@@ -65,6 +67,7 @@
     "@hono/node-server": "1.19.9",
     "@hono/zod-validator": "0.7.6",
     "@hookform/resolvers": "^5.4.0",
+    "@modelcontextprotocol/sdk": "1.30.0",
     "@platinum-dev/sdk": "0.4.0",
     "@prisma/client": "6.19.3",
     "@scalar/hono-api-reference": "0.11.11",

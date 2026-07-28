@@ -3,10 +3,13 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { HTTPException } from 'hono/http-exception';
 import { auth } from '../auth/auth.js';
-import type { GatewayVariables } from '../auth/middleware.js';
+import { requireAuth, type GatewayVariables } from '../auth/middleware.js';
 import { config } from '../config.js';
 import { prisma } from '../db/prisma.js';
 import { logger } from '../logger.js';
+import { GatewayApiClient, authorizationHeadersFrom } from '../mcp/client.js';
+import { handleGatewayMcpRequest } from '../mcp/server.js';
+import { gatewayToolManifest } from '../mcp/tools.js';
 import { buildAgentCapabilities, buildAgentSkill, buildChatSkill } from '../skill.js';
 import { IdempotencyConflictError } from '../services/commands.js';
 import { openApiDocument } from './openapi.js';
@@ -25,7 +28,15 @@ const app = new Hono<{ Variables: GatewayVariables }>();
 app.use('*', cors({
   origin: config.WEB_ORIGIN,
   credentials: true,
-  allowHeaders: ['content-type', 'authorization', 'x-api-key', 'idempotency-key'],
+  allowHeaders: [
+    'content-type',
+    'authorization',
+    'x-api-key',
+    'idempotency-key',
+    'mcp-protocol-version',
+    'mcp-session-id',
+    'last-event-id',
+  ],
   allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
 }));
 
@@ -51,6 +62,7 @@ app.get('/docs', Scalar({
 app.get('/v1/skill.md', (context) => context.text(buildAgentSkill(), 200, { 'content-type': 'text/markdown; charset=utf-8' }));
 app.get('/v1/chat.md', (context) => context.text(buildChatSkill(), 200, { 'content-type': 'text/markdown; charset=utf-8' }));
 app.get('/v1/capabilities.md', (context) => context.text(buildAgentCapabilities(), 200, { 'content-type': 'text/markdown; charset=utf-8' }));
+app.get('/v1/mcp/manifest', (context) => context.json(gatewayToolManifest()));
 app.on(['GET', 'POST'], '/api/auth/*', (context) => auth.handler(context.req.raw));
 
 // Routers keep their full /v1/... path literals (mounted at '/') so every route
@@ -64,6 +76,14 @@ app.route('/', mediaRoutes);
 app.route('/', groupRoutes);
 app.route('/', apiKeyRoutes);
 app.route('/', webhookRoutes);
+
+app.post('/mcp', requireAuth(), async (context) => {
+  const client = new GatewayApiClient(
+    async (request) => app.fetch(request),
+    authorizationHeadersFrom(context.req.raw),
+  );
+  return handleGatewayMcpRequest(context.req.raw, client);
+});
 
 app.onError((error, context) => {
   if (error instanceof IdempotencyConflictError) return context.json({ error: 'idempotency_conflict', message: error.message }, 409);

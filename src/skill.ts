@@ -17,6 +17,7 @@ Authenticate with \`X-API-Key: $WHATSAPP_GATEWAY_API_KEY\`.
 1. Read \`GET /v1/capabilities.md\` for a compact route and workflow map.
 2. Read \`GET /openapi.json\` for the complete schemas and REST contract.
 3. Read \`GET /v1/baileys-actions\` for every managed WhatsApp action, its exact Baileys method, ordered arguments, description, and permission.
+4. Read \`GET /v1/mcp/manifest\` or connect to \`POST /mcp\` for the agent-native Android and WhatsApp tools.
 
 ## Operating workflow
 
@@ -164,6 +165,7 @@ Base URL: \`${config.PUBLIC_BASE_URL}\`
 - \`GET /v1/android/instances/{instanceId}/status\`
 - \`POST /v1/android/instances/{instanceId}/actions\` — native WhatsApp send/open, notification retrieval, Appium UI selectors, proxy verification, screenshots, and bounded input
 - \`POST /v1/android/instances/{instanceId}/start\`
+- \`POST /v1/android/instances/{instanceId}/upgrade\` — upgrade the bounded controller without changing WhatsApp userdata
 - \`POST /v1/android/instances/{instanceId}/stop\`
 
 Never clone an enrolled Android instance. Provision every number from the clean golden snapshot and retain exactly one persistent sandbox per enrolled number.
@@ -219,6 +221,8 @@ Convenience aliases remain available for message sending and group operations:
 
 ## Discovery
 
+- \`GET /v1/mcp/manifest\` — MCP tool schemas, safety annotations, confirmations, and executor boundaries
+- \`POST /mcp\` — authenticated stateless MCP Streamable HTTP endpoint
 - \`GET /v1/skill.md\`
 - \`GET /v1/chat.md\` — how to write like a person on WhatsApp: tone, WhatsApp's non-Markdown formatting, and chat habits
 - \`GET /v1/capabilities.md\`

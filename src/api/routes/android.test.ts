@@ -26,6 +26,18 @@ describe('native Android API contract', () => {
       using: 'id',
       value: 'com.whatsapp:id/send',
     }).success).toBe(true);
+    expect(androidActionSchema.safeParse({
+      type: 'app.open',
+      package_name: 'com.whatsapp',
+    }).success).toBe(true);
+    expect(androidActionSchema.safeParse({
+      type: 'url.open',
+      url: 'file:///data/local/tmp/private',
+    }).success).toBe(false);
+    expect(androidActionSchema.safeParse({
+      type: 'clipboard.set',
+      text: 'hello from the MCP',
+    }).success).toBe(true);
   });
 
   it('keeps control and VNC credentials encrypted at rest', () => {

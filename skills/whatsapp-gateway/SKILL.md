@@ -14,6 +14,7 @@ Authenticate with `X-API-Key: $WHATSAPP_GATEWAY_API_KEY`.
 1. Read `GET /v1/capabilities.md` for the compact route map.
 2. Read `GET /openapi.json` for all REST schemas.
 3. Read `GET /v1/baileys-actions` for every managed WhatsApp action, exact Baileys method, ordered arguments, description, and permission.
+4. Read `GET /v1/mcp/manifest` or connect to `POST /mcp` for agent-native Android and WhatsApp tools.
 
 ## Workflow
 
@@ -26,7 +27,7 @@ Authenticate with `X-API-Key: $WHATSAPP_GATEWAY_API_KEY`.
 
 Owner-only API key routes are `GET|POST /v1/api-keys` and `DELETE /v1/api-keys/{keyId}`. Account and pairing routes are `GET|POST /v1/accounts`, `GET /v1/accounts/{accountId}`, `GET /v1/accounts/{accountId}/status`, `POST /v1/accounts/{accountId}/pair/qr`, `POST /v1/accounts/{accountId}/pair/code`, and `DELETE /v1/accounts/{accountId}/session`.
 
-Native Android fleet routes are `GET|POST /v1/android/instances`, `GET|DELETE /v1/android/instances/{instanceId}`, `GET /v1/android/instances/{instanceId}/status`, `POST /v1/android/instances/{instanceId}/actions`, `POST /v1/android/instances/{instanceId}/start`, and `POST /v1/android/instances/{instanceId}/stop`. Actions cover native WhatsApp send/open, notification retrieval, Appium UI selectors, proxy verification, screenshots, and bounded input. Provision from the clean pre-enrollment Platinum snapshot only. Never clone an enrolled Android instance.
+Native Android fleet routes are `GET|POST /v1/android/instances`, `GET|DELETE /v1/android/instances/{instanceId}`, `GET /v1/android/instances/{instanceId}/status`, `POST /v1/android/instances/{instanceId}/actions`, `POST /v1/android/instances/{instanceId}/start`, `POST /v1/android/instances/{instanceId}/upgrade`, and `POST /v1/android/instances/{instanceId}/stop`. Actions cover native WhatsApp send/open, notification retrieval, apps and URLs, clipboard/share, Appium UI selectors, proxy verification, screenshots, and bounded input. Provision from the clean pre-enrollment Platinum snapshot only. Never clone an enrolled Android instance.
 
 Persisted state routes are `GET /v1/accounts/{accountId}/chats`, `GET /v1/accounts/{accountId}/contacts`, `GET /v1/accounts/{accountId}/groups`, `GET /v1/accounts/{accountId}/messages`, and `GET /v1/events`. Read `GET /v1/chat.md` (also shipped here as `CHAT.md`) before writing any message: it covers tone, WhatsApp's formatting rules (which are not Markdown), and how to behave in a chat.
 
@@ -41,6 +42,6 @@ Webhook delivery list and detail responses include `lastError`, `lastStatusCode`
 the receiver's exact rejection or transport failure and the current retry state;
 do not reduce a failed delivery to only `retrying` or `failed`.
 
-Discovery routes are `GET /v1/skill.md`, `GET /v1/capabilities.md`, `GET /openapi.json`, and `GET /docs`.
+Discovery routes are `GET /v1/mcp/manifest`, `POST /mcp`, `GET /v1/skill.md`, `GET /v1/capabilities.md`, `GET /openapi.json`, and `GET /docs`.
 
 Ask before sending messages, creating groups, changing participants, or disconnecting unless explicitly requested. Never expose API keys, pairing QR codes, pairing codes, or webhook secrets.

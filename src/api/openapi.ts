@@ -171,6 +171,26 @@ export const openApiDocument = {
     '/v1/capabilities.md': {
       get: { tags: ['API keys'], summary: 'Compact token-efficient capability map', security: [], responses: { '200': { description: 'Capability Markdown' } } },
     },
+    '/v1/mcp/manifest': {
+      get: {
+        tags: ['System'],
+        summary: 'List the Kortix mobile and WhatsApp agent tool registry',
+        security: [],
+        responses: { '200': { description: 'Tool schemas, confirmation policy, annotations, and executor boundary' } },
+      },
+    },
+    '/mcp': {
+      post: {
+        tags: ['System'],
+        summary: 'Stateless MCP Streamable HTTP endpoint',
+        description: 'Use Authorization: Bearer wag_... or X-API-Key. REST permission and account scoping are enforced again for every tool execution.',
+        responses: {
+          '200': { description: 'MCP JSON-RPC response' },
+          '401': { description: 'Missing or invalid gateway credential' },
+          '403': { description: 'Credential lacks permission for the requested operation' },
+        },
+      },
+    },
     '/v1/baileys-actions': {
       get: {
         tags: ['Baileys'], summary: 'List every managed Baileys socket action',
@@ -296,7 +316,11 @@ export const openApiDocument = {
               'whatsapp.open_chat',
               'whatsapp.send_text',
               'whatsapp.force_stop',
+              'apps.list',
+              'app.open',
+              'url.open',
               'notifications.list',
+              'notifications.open_shade',
               'network.egress',
               'screen.screenshot',
               'ui.dump',
@@ -306,9 +330,13 @@ export const openApiDocument = {
               'ui.click',
               'ui.set_value',
               'input.tap',
+              'input.long_press',
               'input.swipe',
               'input.text',
               'input.keyevent',
+              'clipboard.set',
+              'clipboard.paste',
+              'share.text',
             ],
           },
         }, ['type'])),
@@ -329,6 +357,19 @@ export const openApiDocument = {
         summary: 'Gracefully power off Android before stopping the sandbox',
         parameters: [androidInstanceParameter],
         responses: { '200': { description: 'Stopped runtime' }, '502': { description: 'Provider stop failed' } },
+      },
+    },
+    '/v1/android/instances/{instanceId}/upgrade': {
+      post: {
+        tags: ['Android'],
+        summary: 'Upgrade the bounded in-guest Android control agent',
+        description: 'Replaces and restarts only the authenticated controller and preserves Android userdata, WhatsApp enrollment, proxy, and per-instance credentials.',
+        parameters: [androidInstanceParameter],
+        responses: {
+          '200': { description: 'Controller upgraded and live health verified' },
+          '409': { description: 'Runtime or encrypted credentials are unavailable' },
+          '502': { description: 'Provider upgrade failed' },
+        },
       },
     },
     '/v1/accounts/{accountId}/pair/qr': {

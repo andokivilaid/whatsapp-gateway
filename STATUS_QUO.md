@@ -313,6 +313,8 @@ Webhook URL security rejects credentials, unsafe protocols, loopback, private, l
 - `GET /docs`
 - `GET /v1/skill.md`
 - `GET /v1/capabilities.md`
+- `GET /v1/mcp/manifest`
+- `POST /mcp`
 - `GET|POST /api/auth/*`
 
 ### API keys and catalogs
@@ -322,6 +324,18 @@ Webhook URL security rejects credentials, unsafe protocols, loopback, private, l
 - `DELETE /v1/api-keys/{keyId}`
 - `GET /v1/baileys-actions`
 - `GET /v1/webhook-event-types`
+
+### Native Android
+
+- `GET /v1/android/instances`
+- `POST /v1/android/instances`
+- `GET /v1/android/instances/{instanceId}`
+- `DELETE /v1/android/instances/{instanceId}`
+- `GET /v1/android/instances/{instanceId}/status`
+- `POST /v1/android/instances/{instanceId}/actions`
+- `POST /v1/android/instances/{instanceId}/start`
+- `POST /v1/android/instances/{instanceId}/upgrade`
+- `POST /v1/android/instances/{instanceId}/stop`
 
 ### Accounts and pairing
 
