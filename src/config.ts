@@ -33,6 +33,20 @@ export const envSchema = z.object({
   // number's country (e.g. GB) so the reported locale matches the account. docker-compose
   // passes this as "" when unset, so normalize empty to undefined before validating length.
   WA_COUNTRY_CODE: z.string().optional().transform((value) => value?.trim().toUpperCase() || undefined),
+  ANDROID_RUNTIME_PROVIDER: z.enum(['disabled', 'platinum']).default('disabled'),
+  PLATINUM_API_URL: z.string().url().default('https://api.platinum.dev'),
+  PLATINUM_TOKEN: z.string().optional().transform((value) => value?.trim() || undefined),
+  PLATINUM_ANDROID_SOURCE_SANDBOX_ID: z.string().default('sbx_01KYK6HNFFXRJR0ZGWZY6XR26C').transform((value) => value.trim()),
+  PLATINUM_ANDROID_SNAPSHOT_ID: z.string().default('snap_01KYK7J4HP78S1T208KNQR395N').transform((value) => value.trim()),
+  PLATINUM_ANDROID_CONTROL_PORT: z.coerce.number().int().min(1).max(65535).default(8787),
+  PLATINUM_ANDROID_NOVNC_PORT: z.coerce.number().int().min(1).max(65535).default(6080),
+  PLATINUM_ANDROID_NOVNC_PUBLIC: z.enum(['true', 'false']).default('true').transform((value) => value === 'true'),
+  PLATINUM_ANDROID_BOOT_TIMEOUT_MS: z.coerce.number().int().min(30_000).default(240_000),
+  // Optional stable HTTP(S) CONNECT proxy used by the Android Emulator itself.
+  // When empty, an HTTP(S) WA_PROXY_URL is reused; SOCKS is not supported by
+  // the official emulator's -http-proxy flag.
+  PLATINUM_ANDROID_PROXY_URL: z.string().optional().transform((value) => value?.trim() || undefined),
+  PLATINUM_ANDROID_APPIUM_REQUIRED: z.enum(['true', 'false']).default('true').transform((value) => value === 'true'),
   PAIRING_TTL_SECONDS: z.coerce.number().int().min(60).default(300),
   WEBHOOK_POLL_INTERVAL_MS: z.coerce.number().int().min(100).default(1000),
   WEBHOOK_CONCURRENCY: z.coerce.number().int().min(1).max(100).default(10),
@@ -57,6 +71,21 @@ if (parsed.WA_PROXY_URL) {
   const scheme = new URL(parsed.WA_PROXY_URL).protocol.replace(':', '').toLowerCase();
   if (!['http', 'https', 'socks', 'socks4', 'socks5'].includes(scheme)) {
     throw new Error(`WA_PROXY_URL scheme must be http, https, or socks5 (got ${scheme})`);
+  }
+}
+if (parsed.ANDROID_RUNTIME_PROVIDER === 'platinum') {
+  if (!parsed.PLATINUM_TOKEN) throw new Error('PLATINUM_TOKEN is required when ANDROID_RUNTIME_PROVIDER=platinum');
+  if (!parsed.PLATINUM_ANDROID_SOURCE_SANDBOX_ID) {
+    throw new Error('PLATINUM_ANDROID_SOURCE_SANDBOX_ID is required when ANDROID_RUNTIME_PROVIDER=platinum');
+  }
+  if (!parsed.PLATINUM_ANDROID_SNAPSHOT_ID) {
+    throw new Error('PLATINUM_ANDROID_SNAPSHOT_ID is required when ANDROID_RUNTIME_PROVIDER=platinum');
+  }
+}
+if (parsed.PLATINUM_ANDROID_PROXY_URL) {
+  const scheme = new URL(parsed.PLATINUM_ANDROID_PROXY_URL).protocol.replace(':', '').toLowerCase();
+  if (!['http', 'https'].includes(scheme)) {
+    throw new Error(`PLATINUM_ANDROID_PROXY_URL scheme must be http or https (got ${scheme})`);
   }
 }
 const encryptionKey = Buffer.from(parsed.ENCRYPTION_KEY, 'base64');

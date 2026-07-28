@@ -5,6 +5,7 @@
  */
 export const gatewayPermissions = {
   accounts: ['read', 'write', 'pair', 'disconnect'],
+  android: ['read', 'write', 'control'],
   messages: ['read', 'write', 'send'],
   groups: ['read', 'write'],
   contacts: ['read', 'write'],

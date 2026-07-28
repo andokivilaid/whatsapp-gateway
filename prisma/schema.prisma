@@ -100,17 +100,18 @@ model Apikey {
 }
 
 model Tenant {
-  id          String            @id
-  ownerUserId String            @unique
-  name        String
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  owner       User              @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
-  waAccounts  WhatsAppAccount[]
-  events      InboundEvent[]
-  commands    OutboundCommand[]
-  webhooks    WebhookEndpoint[]
-  auditLog    AuditLog[]
+  id               String            @id
+  ownerUserId      String            @unique
+  name             String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  owner            User              @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  waAccounts       WhatsAppAccount[]
+  androidInstances AndroidInstance[]
+  events           InboundEvent[]
+  commands         OutboundCommand[]
+  webhooks         WebhookEndpoint[]
+  auditLog         AuditLog[]
 
   @@map("tenants")
 }
@@ -149,10 +150,46 @@ model WhatsAppAccount {
   events               InboundEvent[]
   commands             OutboundCommand[]
   mediaUploads         WhatsAppMediaUpload[]
+  androidInstance      AndroidInstance?
 
   @@index([tenantId])
   @@index([status, nextConnectAt])
   @@map("whatsapp_accounts")
+}
+
+/// One persistent native-Android WhatsApp runtime. Provider credentials stay in
+/// server configuration; only encrypted per-instance control/VNC credentials
+/// are stored here. Golden snapshots must remain pre-enrollment.
+model AndroidInstance {
+  id                       String    @id
+  tenantId                 String
+  accountId                String?   @unique
+  displayName              String
+  provider                 String    @default("platinum")
+  providerInstanceId       String?   @unique
+  sourceProviderInstanceId String
+  snapshotId               String
+  status                   String    @default("provisioning")
+  encryptedControlUrl      String?
+  encryptedControlToken    String?
+  novncUrl                 String?
+  encryptedVncPassword     String?
+  encryptedProxyUrl        String?
+  androidVersion           String?
+  whatsappVersion          String?
+  lastHealthAt             DateTime?
+  lastError                String?
+  idempotencyKey           String?
+  metadata                 Json      @default("{}")
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  deletedAt                DateTime?
+  tenant                   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  account                  WhatsAppAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, status])
+  @@map("android_instances")
 }
 
 model WhatsAppAccountLease {

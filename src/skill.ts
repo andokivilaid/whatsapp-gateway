@@ -155,6 +155,19 @@ Base URL: \`${config.PUBLIC_BASE_URL}\`
 - \`POST /v1/accounts/{accountId}/pair/code\`
 - \`DELETE /v1/accounts/{accountId}/session\`
 
+## Native Android runtimes
+
+- \`GET /v1/android/instances\`
+- \`POST /v1/android/instances\` — clone the configured pre-enrollment Platinum snapshot; credentials are returned once
+- \`GET /v1/android/instances/{instanceId}\`
+- \`DELETE /v1/android/instances/{instanceId}\` — gracefully power off Android and delete its sandbox
+- \`GET /v1/android/instances/{instanceId}/status\`
+- \`POST /v1/android/instances/{instanceId}/actions\` — native WhatsApp send/open, notification retrieval, Appium UI selectors, proxy verification, screenshots, and bounded input
+- \`POST /v1/android/instances/{instanceId}/start\`
+- \`POST /v1/android/instances/{instanceId}/stop\`
+
+Never clone an enrolled Android instance. Provision every number from the clean golden snapshot and retain exactly one persistent sandbox per enrolled number.
+
 ## API keys (signed-in owner only)
 
 - \`GET /v1/api-keys\`

@@ -20,6 +20,9 @@ dependencies:
   '@hookform/resolvers':
     specifier: ^5.4.0
     version: 5.4.0(react-hook-form@7.82.0)
+  '@platinum-dev/sdk':
+    specifier: 0.4.0
+    version: 0.4.0
   '@prisma/client':
     specifier: 6.19.3
     version: 6.19.3(prisma@6.19.3)(typescript@5.9.3)
@@ -1192,6 +1195,11 @@ packages:
 
   /@pinojs/redact@0.4.0:
     resolution: {integrity: sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg==}
+    dev: false
+
+  /@platinum-dev/sdk@0.4.0:
+    resolution: {integrity: sha512-HBLPSGIrQor8GHQ8KfvufFYcMIoiG+QortiY6Yma/qRJ7/Z+HuHgCnrKzNAwpyxUcj5XWThtLJNuY6kSjBXM2A==}
+    engines: {node: '>=18'}
     dev: false
 
   /@prisma/client@6.19.3(prisma@6.19.3)(typescript@5.9.3):
