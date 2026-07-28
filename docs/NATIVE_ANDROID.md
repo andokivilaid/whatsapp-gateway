@@ -113,6 +113,7 @@ GET    /v1/android/instances
 GET    /v1/android/instances/{instanceId}
 GET    /v1/android/instances/{instanceId}/status
 POST   /v1/android/instances/{instanceId}/start
+POST   /v1/android/instances/{instanceId}/upgrade
 POST   /v1/android/instances/{instanceId}/stop
 DELETE /v1/android/instances/{instanceId}
 ```
@@ -133,7 +134,11 @@ Supported actions are:
 - `whatsapp.open_chat`
 - `whatsapp.send_text`
 - `whatsapp.force_stop`
+- `apps.list`
+- `app.open`
+- `url.open`
 - `notifications.list`
+- `notifications.open_shade`
 - `network.egress`
 - `screen.screenshot`
 - `ui.dump`
@@ -143,9 +148,13 @@ Supported actions are:
 - `ui.click`
 - `ui.set_value`
 - `input.tap`
+- `input.long_press`
 - `input.swipe`
 - `input.text`
 - `input.keyevent`
+- `clipboard.set`
+- `clipboard.paste`
+- `share.text`
 
 There is deliberately no arbitrary shell action. The gateway calls the
 in-guest service locally through a Platinum exec operation, while the optional
@@ -157,6 +166,12 @@ independent bearer token.
 through UiAutomator2. `notifications.list` returns only WhatsApp entries from
 Appium Settings' 100-event active/recent notification buffer. Generic selector
 actions accept `accessibility id`, `id`, `-android uiautomator`, or `xpath`.
+
+`POST /upgrade` replaces only the authenticated controller scripts inside a
+running sandbox, keeps the existing control/VNC credentials and proxy, restarts
+the controller supervisor, and verifies its reported `agent_version`. It does
+not restart Android or copy/alter WhatsApp userdata. Use it to roll new bounded
+actions across an enrolled fleet without cloning phone identities.
 
 This is the native controller boundary, but it is not a private WhatsApp API.
 WhatsApp UI/resource changes can require selector updates, notifications are

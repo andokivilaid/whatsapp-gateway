@@ -17,6 +17,7 @@ const appiumUrl = String(config.appium_url || 'http://127.0.0.1:4723').replace(/
 const proxyPath = '/var/lib/android-network/http-proxy-url';
 const maxBodyBytes = 64 * 1024;
 const elementKey = 'element-6066-11e4-a52e-4f735466cecf';
+const agentVersion = '2026-07-28.1';
 let appiumSessionId;
 
 function json(response, status, value) {
@@ -158,6 +159,24 @@ async function openWhatsAppChat(input) {
   return { phone_number: phone, composed: Boolean(message) };
 }
 
+async function launchableApps(query) {
+  const { stdout } = await runAdb([
+    'shell', 'cmd', 'package', 'query-activities', '--brief',
+    '-a', 'android.intent.action.MAIN',
+    '-c', 'android.intent.category.LAUNCHER',
+  ]);
+  const needle = typeof query === 'string' ? query.trim().toLowerCase() : '';
+  const seen = new Set();
+  const apps = [];
+  for (const line of stdout.split(/\r?\n/).map((value) => value.trim())) {
+    const match = line.match(/^([A-Za-z][A-Za-z0-9_.]+)\/([A-Za-z0-9_.$]+)$/);
+    if (!match || seen.has(line) || (needle && !line.toLowerCase().includes(needle))) continue;
+    seen.add(line);
+    apps.push({ package_name: match[1], activity: match[2] });
+  }
+  return { apps };
+}
+
 async function networkEgress() {
   let proxyUrl;
   try {
@@ -221,6 +240,7 @@ async function health() {
   const foreground = activities.match(/(?:topResumedActivity|mResumedActivity)=ActivityRecord\{[^}]* ([^ ]+) /)?.[1];
   const whatsappVersion = pkg.match(/versionName=([^\s]+)/)?.[1];
   return {
+    agent_version: agentVersion,
     android_booted: boot.trim() === '1',
     adb_state: adbState.trim(),
     android_version: androidVersion.trim(),
@@ -276,6 +296,22 @@ async function action(input) {
     case 'whatsapp.force_stop':
       await runAdb(['shell', 'am', 'force-stop', whatsappPackage]);
       return { ok: true };
+    case 'apps.list':
+      return launchableApps(input.query);
+    case 'app.open': {
+      const packageName = String(input.package_name || '');
+      if (!/^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$/.test(packageName)) {
+        throw new Error('invalid package_name');
+      }
+      await runAdb(['shell', 'monkey', '-p', packageName, '-c', 'android.intent.category.LAUNCHER', '1']);
+      return { ok: true, package_name: packageName };
+    }
+    case 'url.open': {
+      const url = new URL(String(input.url || ''));
+      if (!['http:', 'https:'].includes(url.protocol)) throw new Error('url must use http or https');
+      await runAdb(['shell', 'am', 'start', '-a', 'android.intent.action.VIEW', '-d', url.toString()]);
+      return { ok: true, url: url.toString() };
+    }
     case 'notifications.list': {
       const sessionId = await ensureAppiumSession();
       const notifications = await appiumRequest('POST', `/session/${sessionId}/execute/sync`, {
@@ -290,6 +326,9 @@ async function action(input) {
         buffered_total: all.length,
       };
     }
+    case 'notifications.open_shade':
+      await runAdb(['shell', 'cmd', 'statusbar', 'expand-notifications']);
+      return { ok: true };
     case 'network.egress':
       return networkEgress();
     case 'screen.screenshot': {
@@ -334,6 +373,14 @@ async function action(input) {
     case 'input.tap':
       await runAdb(['shell', 'input', 'tap', integer(input.x, 'x'), integer(input.y, 'y')]);
       return { ok: true };
+    case 'input.long_press':
+      await runAdb([
+        'shell', 'input', 'swipe',
+        integer(input.x, 'x'), integer(input.y, 'y'),
+        integer(input.x, 'x'), integer(input.y, 'y'),
+        integer(input.duration_ms ?? 800, 'duration_ms', 250, 10_000),
+      ]);
+      return { ok: true };
     case 'input.swipe':
       await runAdb([
         'shell', 'input', 'swipe',
@@ -353,6 +400,34 @@ async function action(input) {
       if (!/^(?:KEYCODE_[A-Z0-9_]+|[0-9]{1,3})$/.test(keycode)) throw new Error('invalid keycode');
       await runAdb(['shell', 'input', 'keyevent', keycode]);
       return { ok: true };
+    }
+    case 'clipboard.set': {
+      const text = String(input.text ?? '');
+      if (text.length > 20_000) throw new Error('text must contain at most 20000 characters');
+      const sessionId = await ensureAppiumSession();
+      await appiumRequest('POST', `/session/${sessionId}/execute/sync`, {
+        script: 'mobile: setClipboard',
+        args: [{
+          content: Buffer.from(text).toString('base64'),
+          contentType: 'plaintext',
+          label: 'Kortix',
+        }],
+      });
+      return { ok: true, characters: text.length };
+    }
+    case 'clipboard.paste':
+      await runAdb(['shell', 'input', 'keyevent', 'KEYCODE_PASTE']);
+      return { ok: true };
+    case 'share.text': {
+      const text = String(input.text ?? '');
+      if (!text || text.length > 20_000) throw new Error('text must contain 1 to 20000 characters');
+      await runAdb([
+        'shell', 'am', 'start',
+        '-a', 'android.intent.action.SEND',
+        '-t', 'text/plain',
+        '--es', 'android.intent.extra.TEXT', text,
+      ]);
+      return { ok: true, characters: text.length };
     }
     default:
       throw new Error('unsupported action');

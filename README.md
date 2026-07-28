@@ -315,6 +315,42 @@ the network-level decision: official Business App + Cloud API coexistence when
 eligible, Android primary + Baileys companion for personal accounts, and
 Appium only for native-only actions.
 
+## MCP for mobile agents
+
+The package exposes one independent Kortix tool registry over both MCP
+Streamable HTTP and stdio. It does not copy OpenPhone code or require an
+OpenPhone Android build.
+
+Remote MCP clients connect to:
+
+```text
+POST https://wag.kortix.cloud/mcp
+Authorization: Bearer wag_...
+```
+
+The endpoint is stateless and returns JSON MCP responses. `GET
+/v1/mcp/manifest` publishes the same tool schemas, safety annotations,
+confirmation policy, and executor boundaries used by the server.
+
+For clients that spawn a local MCP process:
+
+```bash
+export WHATSAPP_GATEWAY_URL=https://wag.kortix.cloud
+export WHATSAPP_GATEWAY_API_KEY=wag_secret
+pnpm mcp
+```
+
+After packaging, use `wag-mcp`. The registry currently separates:
+
+- `mobile_*`: Platinum Android lifecycle, live health, apps, screen/UI,
+  notifications, clipboard/share, input, native WhatsApp, and proxy proof;
+- `whatsapp_*`: normalized accounts, chats, contacts, messages, groups,
+  presence, managed Baileys actions, durable commands, and events.
+
+State-changing MCP tools require `confirmed: true` and retain the gateway's
+API-key permission and account scoping underneath. Pairing credentials and OTPs
+are intentionally excluded from MCP.
+
 ## CLI
 
 Build and link the CLI from source:

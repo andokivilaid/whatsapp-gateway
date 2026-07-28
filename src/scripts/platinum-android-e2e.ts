@@ -14,6 +14,7 @@ async function main() {
   try {
     runtime = await provider.provision({ name: `wa-android-e2e-${Date.now()}` });
     assert.equal(runtime.health.android_booted, true);
+    assert.equal(runtime.health.agent_version, '2026-07-28.1');
     assert.match(runtime.health.whatsapp_version ?? '', /^\d+\.\d+\./);
     assert.equal(runtime.health.native_automation_ready, true);
 
@@ -35,6 +36,17 @@ async function main() {
     assert.equal(externalHealthBody.native_automation_ready, true);
 
     await provider.action(runtime.providerInstanceId, { type: 'whatsapp.launch' });
+    const apps = await provider.action(runtime.providerInstanceId, {
+      type: 'apps.list',
+      query: 'whatsapp',
+    }) as { apps?: Array<{ package_name?: string }> };
+    assert.ok(apps.apps?.some((entry) => entry.package_name === 'com.whatsapp'));
+    const clipboard = await provider.action(runtime.providerInstanceId, {
+      type: 'clipboard.set',
+      text: 'Kortix Android E2E',
+    }) as { ok?: boolean; characters?: number };
+    assert.equal(clipboard.ok, true);
+    assert.equal(clipboard.characters, 18);
     const uiSource = await provider.action(runtime.providerInstanceId, {
       type: 'ui.source',
     }) as { xml?: string };
@@ -73,6 +85,9 @@ async function main() {
       novnc_ui_status: uiJs.status,
       external_control_status: externalHealth.status,
       native_automation_ready: runtime.health.native_automation_ready,
+      agent_version: runtime.health.agent_version,
+      whatsapp_app_discovered: true,
+      clipboard_set: clipboard.ok,
       ui_source_bytes: uiSource.xml?.length,
       whatsapp_notifications: notificationResult.notifications?.length,
       proxy_configured: egress.configured,

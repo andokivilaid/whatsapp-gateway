@@ -49,7 +49,20 @@ export const androidActionSchema = z.discriminatedUnion('type', [
     timeout_ms: z.number().int().min(1000).max(60_000).optional(),
   }),
   z.object({ type: z.literal('whatsapp.force_stop') }),
+  z.object({
+    type: z.literal('apps.list'),
+    query: z.string().max(200).optional(),
+  }),
+  z.object({
+    type: z.literal('app.open'),
+    package_name: z.string().regex(/^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$/),
+  }),
+  z.object({
+    type: z.literal('url.open'),
+    url: z.string().url().refine((value) => ['http:', 'https:'].includes(new URL(value).protocol)),
+  }),
   z.object({ type: z.literal('notifications.list') }),
+  z.object({ type: z.literal('notifications.open_shade') }),
   z.object({ type: z.literal('network.egress') }),
   z.object({ type: z.literal('screen.screenshot') }),
   z.object({ type: z.literal('ui.dump') }),
@@ -81,6 +94,12 @@ export const androidActionSchema = z.discriminatedUnion('type', [
     y: z.number().int().min(0).max(10_000),
   }),
   z.object({
+    type: z.literal('input.long_press'),
+    x: z.number().int().min(0).max(10_000),
+    y: z.number().int().min(0).max(10_000),
+    duration_ms: z.number().int().min(250).max(10_000).optional(),
+  }),
+  z.object({
     type: z.literal('input.swipe'),
     x1: z.number().int().min(0).max(10_000),
     y1: z.number().int().min(0).max(10_000),
@@ -93,6 +112,9 @@ export const androidActionSchema = z.discriminatedUnion('type', [
     type: z.literal('input.keyevent'),
     keycode: z.string().regex(/^(?:KEYCODE_[A-Z0-9_]+|[0-9]{1,3})$/),
   }),
+  z.object({ type: z.literal('clipboard.set'), text: z.string().max(20_000) }),
+  z.object({ type: z.literal('clipboard.paste') }),
+  z.object({ type: z.literal('share.text'), text: z.string().min(1).max(20_000) }),
 ]);
 
 type AndroidInstanceRecord = Awaited<ReturnType<typeof prisma.androidInstance.findFirstOrThrow>>;
@@ -299,6 +321,36 @@ app.post('/v1/android/instances/:instanceId/start', requireAuth({ resource: 'and
     },
   });
   await audit(actor, 'android_instance.start', instance.id);
+  return context.json({ ...publicInstance(updated), health });
+});
+
+app.post('/v1/android/instances/:instanceId/upgrade', requireAuth({ resource: 'android', action: 'write' }), async (context) => {
+  const actor = context.get('actor');
+  const instance = await instanceFor(actor.tenantId, context.req.param('instanceId'));
+  if (!instance.providerInstanceId) throw new HTTPException(409, { message: 'Android instance is not ready' });
+  const credentials = decryptAndroidInstanceCredentials(instance);
+  if (!credentials.control_token || !credentials.vnc_password) {
+    throw new HTTPException(409, { message: 'Android instance credentials are unavailable' });
+  }
+  const health = await providerCall(() => androidRuntimeProvider().upgrade(instance.providerInstanceId!, {
+    controlToken: credentials.control_token!,
+    vncPassword: credentials.vnc_password!,
+    ...(credentials.proxy_url ? { proxyUrl: credentials.proxy_url } : {}),
+  }));
+  const updated = await prisma.androidInstance.update({
+    where: { id: instance.id },
+    data: {
+      status: health.android_booted ? 'running' : health.provider_state,
+      androidVersion: health.android_version ?? null,
+      whatsappVersion: health.whatsapp_version ?? null,
+      lastHealthAt: new Date(),
+      lastError: health.error ?? null,
+    },
+  });
+  await audit(actor, 'android_instance.upgrade', instance.id, {
+    provider_instance_id: instance.providerInstanceId,
+    agent_version: health.agent_version,
+  });
   return context.json({ ...publicInstance(updated), health });
 });
 

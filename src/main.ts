@@ -39,7 +39,7 @@ if (config.RUNTIME_ROLE === 'api' || config.RUNTIME_ROLE === 'all') {
     // Single-page-app fallback: any browser GET that is not an API, docs, or
     // static-asset route resolves to the client shell so deep links and hard
     // refreshes (e.g. /app/numbers/:id/chats) load the router instead of 404ing.
-    const apiPrefixes = ['/v1', '/api', '/health', '/openapi.json', '/docs', '/assets'];
+    const apiPrefixes = ['/v1', '/api', '/mcp', '/health', '/openapi.json', '/docs', '/assets'];
     app.get('*', (context, next) => {
       const path = context.req.path;
       if (apiPrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))) return next();

@@ -9,6 +9,7 @@ import type {
   AndroidRuntimeProvider,
   ProvisionAndroidRuntimeInput,
   ProvisionedAndroidRuntime,
+  UpgradeAndroidRuntimeInput,
 } from '../types.js';
 
 const CONTROL_CONFIG_PATH = '/var/lib/android-control/config.json';
@@ -154,8 +155,24 @@ exit 1
     const prepare = `
 set -eu
 if pgrep -f '^/opt/android-sdk/emulator/qemu/linux-x86_64/qemu-system-x86_64 @whatsapp' >/dev/null; then
-  /usr/local/sbin/platinum-android-safe-poweroff
+  if ! /usr/local/sbin/platinum-android-safe-poweroff; then
+    # A freshly resumed snapshot can expose the qemu process before ADB has
+    # moved from offline to device. In that narrow state Android cannot accept
+    # a graceful poweroff, so terminate only qemu and let the durable launcher
+    # start a clean emulator. Never fail provisioning on this boot race.
+    pkill -TERM -f '^/opt/android-sdk/emulator/qemu/linux-x86_64/qemu-system-x86_64 @whatsapp' || true
+  fi
+  for i in $(seq 1 30); do
+    if ! pgrep -f '^/opt/android-sdk/emulator/qemu/linux-x86_64/qemu-system-x86_64 @whatsapp' >/dev/null; then
+      break
+    fi
+    sleep 1
+  done
+  if pgrep -f '^/opt/android-sdk/emulator/qemu/linux-x86_64/qemu-system-x86_64 @whatsapp' >/dev/null; then
+    pkill -KILL -f '^/opt/android-sdk/emulator/qemu/linux-x86_64/qemu-system-x86_64 @whatsapp' || true
+  fi
 fi
+/opt/android-sdk/platform-tools/adb kill-server >/dev/null 2>&1 || true
 rm -f /run/platinum-android-hold-until
 `;
     await checked(sandbox.exec(['bash', '-lc', prepare], { timeoutMs: 90_000 }));
@@ -294,6 +311,14 @@ rm -f /run/platinum-android-hold-until
         error: error instanceof Error ? error.message : String(error),
       };
     }
+  }
+
+  async upgrade(providerInstanceId: string, input: UpgradeAndroidRuntimeInput): Promise<AndroidRuntimeHealth> {
+    const sandbox = await this.sandbox(providerInstanceId);
+    const state = await sandbox.refresh();
+    if (state.state !== 'running') throw new Error('Android runtime must be running before its control agent can be upgraded');
+    await this.installControlAgent(sandbox, input.controlToken, input.vncPassword, input.proxyUrl);
+    return this.waitForHealthyAndroid(sandbox);
   }
 
   async action(providerInstanceId: string, action: AndroidControlAction): Promise<unknown> {
