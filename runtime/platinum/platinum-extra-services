@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+
+control=/usr/local/sbin/platinum-android-control
+appium=/opt/appium/node_modules/.bin/appium
+
+if ! pgrep -f "^/bin/sh ${control}$" >/dev/null 2>&1; then
+  setsid "$control" >/var/log/android-control-supervisor.log 2>&1 < /dev/null &
+fi
+
+if [ -x "$appium" ] && ! pgrep -f "${appium}.*--port 4723" >/dev/null 2>&1; then
+  setsid env \
+    PATH=/opt/node22/bin:/opt/android-sdk/platform-tools:/usr/bin:/bin \
+    ANDROID_HOME=/opt/android-sdk \
+    ANDROID_SDK_ROOT=/opt/android-sdk \
+    APPIUM_HOME=/opt/appium-home \
+    "$appium" --address 127.0.0.1 --port 4723 \
+    >/var/log/android-appium.log 2>&1 < /dev/null &
+fi

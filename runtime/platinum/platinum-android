@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export ANDROID_SDK_ROOT=/opt/android-sdk
+export ANDROID_HOME=/opt/android-sdk
+export ANDROID_AVD_HOME=/var/lib/android-avd
+export DISPLAY=:0
+export QT_X11_NO_MITSHM=1
+
+modprobe kvm
+modprobe kvm_amd
+rm -f /tmp/.X0-lock /tmp/.X11-unix/X0
+
+children=()
+cleanup() {
+  trap - EXIT INT TERM
+  if ((${#children[@]})); then
+    kill "${children[@]}" 2>/dev/null || true
+    wait "${children[@]}" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT INT TERM
+
+Xvfb :0 -screen 0 800x1400x24 -ac +extension GLX +render -noreset >/var/log/android-xvfb.log 2>&1 &
+children+=("$!")
+sleep 1
+fluxbox >/var/log/android-fluxbox.log 2>&1 &
+children+=("$!")
+x11vnc -display :0 -forever -shared -rfbauth /var/lib/android-vnc/passwd -rfbport 5900 -localhost -noxdamage >/var/log/android-x11vnc.log 2>&1 &
+children+=("$!")
+websockify --web=/usr/share/novnc 0.0.0.0:6080 localhost:5900 >/var/log/android-novnc.log 2>&1 &
+children+=("$!")
+
+proxy_args=()
+proxy_path=/var/lib/android-network/http-proxy-url
+if [[ -s "$proxy_path" ]]; then
+  IFS= read -r proxy_url < "$proxy_path"
+  case "$proxy_url" in
+    http://*|https://*) proxy_args=(-http-proxy "$proxy_url") ;;
+    *) echo "Ignoring unsupported Android proxy scheme" >&2 ;;
+  esac
+fi
+
+/opt/android-sdk/emulator/emulator @whatsapp \
+  -accel on \
+  -gpu swiftshader_indirect \
+  -no-audio \
+  -skip-adb-auth \
+  -no-boot-anim \
+  -no-snapshot \
+  -memory 4096 \
+  -cores 4 \
+  -camera-back none \
+  -camera-front none \
+  "${proxy_args[@]}" &
+children+=("$!")
+wait "${children[-1]}"

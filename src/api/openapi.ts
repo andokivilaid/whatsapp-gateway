@@ -13,6 +13,7 @@ const endpointParameter = pathParameter('endpointId');
 const deliveryParameter = pathParameter('deliveryId');
 const commandParameter = pathParameter('commandId');
 const keyParameter = pathParameter('keyId');
+const androidInstanceParameter = pathParameter('instanceId');
 const idempotencyParameter = {
   name: 'Idempotency-Key', in: 'header', required: false,
   description: 'Client-generated retry key, unique per tenant and durable command.',
@@ -40,12 +41,13 @@ export const openApiDocument = {
   info: {
     title: 'Kortix WhatsApp Gateway API',
     version: '0.1.0',
-    description: 'A browserless, multi-tenant, durable Baileys linked-device gateway for WhatsApp agents.',
+    description: 'A multi-tenant WhatsApp gateway supporting durable Baileys linked devices and provider-backed native Android runtimes.',
   },
   servers: [{ url: config.PUBLIC_BASE_URL, description: 'Configured gateway' }],
   tags: [
     { name: 'System' },
     { name: 'Accounts' },
+    { name: 'Android' },
     { name: 'Pairing' },
     { name: 'Messages' },
     { name: 'Groups' },
@@ -232,6 +234,102 @@ export const openApiDocument = {
     },
     '/v1/accounts/{accountId}/status': {
       get: { tags: ['Accounts'], summary: 'Get connection and pairing status', description: 'General status is safe for API keys; pairing credentials are returned only to the signed-in owner or by an explicit pairing operation.', parameters: [accountParameter], responses: { '200': { description: 'Current status' } } },
+    },
+    '/v1/android/instances': {
+      get: {
+        tags: ['Android'],
+        summary: 'List native Android WhatsApp runtimes',
+        responses: { '200': { description: 'Tenant Android instances with secrets omitted' } },
+      },
+      post: {
+        tags: ['Android'],
+        summary: 'Clone and provision a native Android runtime from the configured golden snapshot',
+        description: 'This synchronous operation can take several minutes. The response returns unique noVNC and control credentials once. Retry with the same Idempotency-Key to avoid duplicate sandboxes.',
+        parameters: [idempotencyParameter],
+        requestBody: jsonBody(object({
+          display_name: { type: 'string', minLength: 1, maxLength: 100, default: 'WhatsApp Android' },
+          account_id: { type: 'string', description: 'Optional Baileys account to bind as this Android primary device companion' },
+          proxy_url: { type: 'string', format: 'uri', description: 'Optional write-only stable HTTP(S) proxy override' },
+        })),
+        responses: {
+          '201': { description: 'Android runtime ready; credentials returned once' },
+          '200': { description: 'Existing idempotent runtime record' },
+          '502': { description: 'Provider provisioning failed; the failed record remains inspectable' },
+          '503': { description: 'Android runtime provider is disabled' },
+        },
+      },
+    },
+    '/v1/android/instances/{instanceId}': {
+      get: {
+        tags: ['Android'],
+        summary: 'Get a native Android runtime',
+        parameters: [androidInstanceParameter],
+        responses: { '200': { description: 'Android runtime without credentials' }, '404': { description: 'Not found' } },
+      },
+      delete: {
+        tags: ['Android'],
+        summary: 'Gracefully power off Android and delete its provider sandbox',
+        parameters: [androidInstanceParameter],
+        responses: { '204': { description: 'Runtime deleted' }, '404': { description: 'Not found' }, '502': { description: 'Provider deletion failed' } },
+      },
+    },
+    '/v1/android/instances/{instanceId}/status': {
+      get: {
+        tags: ['Android'],
+        summary: 'Refresh provider, Android, and native WhatsApp health',
+        parameters: [androidInstanceParameter],
+        responses: { '200': { description: 'Persisted instance plus live health' }, '404': { description: 'Not found' } },
+      },
+    },
+    '/v1/android/instances/{instanceId}/actions': {
+      post: {
+        tags: ['Android'],
+        summary: 'Run a bounded native Android action through the in-guest control service',
+        description: 'Native WhatsApp send/open, Appium UI selectors, notification retrieval, proxy verification, screenshots, and bounded inputs. Arbitrary shell execution is not exposed.',
+        parameters: [androidInstanceParameter],
+        requestBody: jsonBody(object({
+          type: {
+            type: 'string',
+            enum: [
+              'whatsapp.launch',
+              'whatsapp.compose',
+              'whatsapp.open_chat',
+              'whatsapp.send_text',
+              'whatsapp.force_stop',
+              'notifications.list',
+              'network.egress',
+              'screen.screenshot',
+              'ui.dump',
+              'ui.source',
+              'ui.find',
+              'ui.find_all',
+              'ui.click',
+              'ui.set_value',
+              'input.tap',
+              'input.swipe',
+              'input.text',
+              'input.keyevent',
+            ],
+          },
+        }, ['type'])),
+        responses: { '200': { description: 'Action result' }, '400': { description: 'Invalid or unsupported action' }, '409': { description: 'Instance is not ready' } },
+      },
+    },
+    '/v1/android/instances/{instanceId}/start': {
+      post: {
+        tags: ['Android'],
+        summary: 'Start the sandbox and wait for Android to boot',
+        parameters: [androidInstanceParameter],
+        responses: { '200': { description: 'Runtime and live health' }, '502': { description: 'Provider start failed' } },
+      },
+    },
+    '/v1/android/instances/{instanceId}/stop': {
+      post: {
+        tags: ['Android'],
+        summary: 'Gracefully power off Android before stopping the sandbox',
+        parameters: [androidInstanceParameter],
+        responses: { '200': { description: 'Stopped runtime' }, '502': { description: 'Provider stop failed' } },
+      },
     },
     '/v1/accounts/{accountId}/pair/qr': {
       post: {

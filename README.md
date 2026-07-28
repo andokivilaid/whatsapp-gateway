@@ -298,6 +298,23 @@ curl -sS "$WHATSAPP_GATEWAY_URL/v1/accounts" \
 
 Never place an API key in a URL, source file, log, or agent transcript.
 
+## Native Android on Platinum
+
+The gateway can also provision one persistent native WhatsApp Android app per
+Platinum sandbox from a validated pre-enrollment snapshot. This path uses the
+official Android Emulator with Google Play, Appium UiAutomator2, native
+notification access, and optional stable residential egress—not WhatsApp Web
+or Baileys.
+
+See [Native Android runtimes on Platinum](docs/NATIVE_ANDROID.md) for the exact
+image, provider SDK lifecycle, API, credentials, safety invariants, and live
+E2E smoke.
+
+See [Android WhatsApp API architecture](docs/ANDROID_API_ARCHITECTURE.md) for
+the network-level decision: official Business App + Cloud API coexistence when
+eligible, Android primary + Baileys companion for personal accounts, and
+Appium only for native-only actions.
+
 ## CLI
 
 Build and link the CLI from source:

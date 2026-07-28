@@ -11,6 +11,7 @@ import { buildAgentCapabilities, buildAgentSkill, buildChatSkill } from '../skil
 import { IdempotencyConflictError } from '../services/commands.js';
 import { openApiDocument } from './openapi.js';
 import { accountRoutes } from './routes/accounts.js';
+import { androidRoutes } from './routes/android.js';
 import { apiKeyRoutes } from './routes/api-keys.js';
 import { chatContactRoutes } from './routes/chats-contacts.js';
 import { commandRoutes } from './routes/commands.js';
@@ -55,6 +56,7 @@ app.on(['GET', 'POST'], '/api/auth/*', (context) => auth.handler(context.req.raw
 // Routers keep their full /v1/... path literals (mounted at '/') so every route
 // string stays greppable and the doc-coverage tests can scan them as source.
 app.route('/', accountRoutes);
+app.route('/', androidRoutes);
 app.route('/', commandRoutes);
 app.route('/', chatContactRoutes);
 app.route('/', messageRoutes);

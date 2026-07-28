@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+
+while true; do
+  /usr/bin/node /usr/local/lib/platinum-android-control/server.mjs \
+    >>/var/log/android-control.log 2>&1 || true
+  sleep 2
+done
