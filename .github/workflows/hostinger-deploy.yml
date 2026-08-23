@@ -1,0 +1,27 @@
+name: Hostinger deploy
+
+on:
+  workflow_run:
+    workflows: [Container]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      vars.HOSTINGER_SSH_HOST != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy on VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ vars.HOSTINGER_SSH_HOST }}
+          username: root
+          key: ${{ secrets.HOSTINGER_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd /docker/whatsapp-gateway
+            git fetch origin main && git reset --hard origin/main
+            IMAGE="ghcr.io/andokivilaid/whatsapp-gateway:sha-${{ github.event.workflow_run.head_sha }}"
+            ./scripts/deploy-hostinger.sh "$IMAGE"
