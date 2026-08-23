@@ -1,0 +1,15 @@
+# Traefik ingress on Hostinger VPS (Traefik already binds :80/:443).
+# Use with: docker compose -f docker-compose.production.yml -f docker-compose.hostinger.yml
+
+services:
+  api:
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.whatsapp-gateway.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.whatsapp-gateway.entrypoints=websecure
+      - traefik.http.routers.whatsapp-gateway.tls.certresolver=letsencrypt
+      - traefik.http.services.whatsapp-gateway.loadbalancer.server.port=8080
+
+  caddy:
+    profiles:
+      - never

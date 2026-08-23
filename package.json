@@ -35,9 +35,9 @@
   },
   "scripts": {
     "dev": "concurrently -k -n api,worker,webhooks,web -c blue,magenta,yellow,green \"pnpm dev:api\" \"pnpm dev:worker\" \"pnpm dev:webhooks\" \"pnpm dev:web\"",
-    "dev:api": "RUNTIME_ROLE=api tsx watch src/main.ts",
-    "dev:worker": "RUNTIME_ROLE=worker tsx watch src/main.ts",
-    "dev:webhooks": "RUNTIME_ROLE=webhooks tsx watch src/main.ts",
+    "dev:api": "RUNTIME_ROLE=api node --env-file=.env ./node_modules/tsx/dist/cli.mjs watch src/main.ts",
+    "dev:worker": "RUNTIME_ROLE=worker node --env-file=.env ./node_modules/tsx/dist/cli.mjs watch src/main.ts",
+    "dev:webhooks": "RUNTIME_ROLE=webhooks node --env-file=.env ./node_modules/tsx/dist/cli.mjs watch src/main.ts",
     "dev:web": "vite",
     "build": "pnpm db:generate && pnpm build:server && pnpm build:web",
     "build:server": "tsup src/main.ts src/cli.ts src/mcp-stdio.ts src/scripts/e2e.ts src/scripts/platinum-android-e2e.ts --format esm --platform node --target node22 --out-dir dist/server --splitting false --sourcemap",
