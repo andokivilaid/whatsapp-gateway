@@ -23,6 +23,7 @@ import { createPostgresAuthState } from './auth-state.js';
 import { createProxyAgent, installGlobalProxyDispatcher, redactProxy } from './proxy.js';
 import { describeMessage } from './message-facts.js';
 import { resolveWaVersion } from './wa-version.js';
+import { resolveMessageStatus } from './message-status.js';
 import { JidIdentity, isLidJid, isPhoneJid, pairOf, pairsFromKey, phoneJidFrom, type LidPair } from './jid-identity.js';
 import { baileysActions, isBaileysAction } from './actions.js';
 import { resetReconnectBackoff, scheduleReconnect } from '../worker/reconnect.js';
@@ -457,11 +458,19 @@ export class BaileysSession {
     this.on(socket, 'messages.update', async (updates) => {
       for (const update of updates) {
         if (!update.key.id) continue;
+        const incoming = update.update.status;
+        if (incoming === undefined || incoming === null) continue;
+        // Receipts arrive out of order; a late SERVER_ACK must not undo READ.
+        const stored = await prisma.whatsAppMessage.findUnique({
+          where: { accountId_whatsappMessageId: { accountId: this.accountId, whatsappMessageId: update.key.id } },
+          select: { status: true },
+        });
+        if (!stored) continue;
+        const status = resolveMessageStatus(stored.status, incoming);
+        if (status === stored.status) continue;
         await prisma.whatsAppMessage.updateMany({
-          where: { accountId: this.accountId, whatsappMessageId: update.key.id },
-          data: {
-            ...(update.update.status === undefined || update.update.status === null ? {} : { status: String(update.update.status) }),
-          },
+          where: { accountId: this.accountId, whatsappMessageId: update.key.id, status: stored.status },
+          data: { status },
         });
       }
       await emitEvent(this.accountId, 'message.updated', json(updates));
