@@ -23,6 +23,7 @@ import { createPostgresAuthState } from './auth-state.js';
 import { createProxyAgent, installGlobalProxyDispatcher, redactProxy } from './proxy.js';
 import { describeMessage } from './message-facts.js';
 import { resolveWaVersion } from './wa-version.js';
+import { JidIdentity, isLidJid, isPhoneJid, pairOf, pairsFromKey, phoneJidFrom, type LidPair } from './jid-identity.js';
 import { baileysActions, isBaileysAction } from './actions.js';
 import { resetReconnectBackoff, scheduleReconnect } from '../worker/reconnect.js';
 
@@ -93,6 +94,26 @@ function contactPatch(contact: { name?: string | null; notify?: string | null })
   };
 }
 
+/** 1:1 and group chats get a chat row; broadcast lists, status and newsletters do not. */
+function isConversationJid(jid: string): boolean {
+  return isPhoneJid(jid) || isLidJid(jid) || isGroupJid(jid);
+}
+
+/** History-sync conversations carry both addresses as `pnJid` / `lidJid`. */
+function chatPairs(chat: Partial<Chat>): LidPair[] {
+  const { id: chatId, pnJid, lidJid } = chat as { id?: string | null; pnJid?: string | null; lidJid?: string | null };
+  return [pairOf(chatId, pnJid), pairOf(lidJid, chatId), pairOf(lidJid, pnJid)]
+    .filter((pair): pair is LidPair => pair !== null);
+}
+
+/** Contacts carry `lid` and `phoneNumber` next to whichever `id` WhatsApp preferred. */
+function contactPairs(contact: Partial<Contact>): LidPair[] {
+  const { id: contactId, lid, phoneNumber } = contact as { id?: string | null; lid?: string | null; phoneNumber?: string | null };
+  const phone = phoneJidFrom(phoneNumber);
+  return [pairOf(contactId, phone), pairOf(lid, contactId), pairOf(lid, phone)]
+    .filter((pair): pair is LidPair => pair !== null);
+}
+
 export function messageText(message: WAMessage): string | null {
   const body = message.message;
   if (!body) return null;
@@ -154,12 +175,18 @@ export class BaileysSession {
   private pairingTransportReady = false;
   private stableConnectionTimer: NodeJS.Timeout | null = null;
   private readonly log;
+  /** LID ↔ phone resolution; everything persisted is keyed by the phone JID when known. */
+  private readonly identity: JidIdentity;
 
   constructor(
     readonly accountId: string,
     private readonly onClosed: (accountId: string) => void,
   ) {
     this.log = logger.child({ accountId });
+    this.identity = new JidIdentity(prisma, accountId, async (lid) => {
+      const store = this.socket?.signalRepository?.lidMapping;
+      return store ? store.getPNForLID(lid) : null;
+    });
   }
 
   async start() {
@@ -345,6 +372,13 @@ export class BaileysSession {
 
   private wireSyncEvents(socket: WASocket) {
     this.on(socket, 'messaging-history.set', async ({ chats, contacts, messages }) => {
+      // Learn every pairing the sync reveals BEFORE persisting, so the batch is
+      // written straight under phone JIDs instead of being re-keyed afterwards.
+      await this.identity.learnAll([
+        ...chats.flatMap((chat) => chatPairs(chat)),
+        ...contacts.flatMap((contact) => contactPairs(contact)),
+        ...messages.flatMap((message) => pairsFromKey(message.key)),
+      ], 'history');
       await this.upsertChats(chats);
       await this.upsertContacts(contacts);
       for (const message of messages) await this.persistMessage(message, false);
@@ -358,14 +392,17 @@ export class BaileysSession {
     this.on(socket, 'chats.update', async (chats) => {
       for (const chat of chats) {
         if (!chat.id) continue;
+        await this.identity.learnAll(chatPairs(chat), 'chat');
+        const jid = await this.identity.canonical(chat.id) ?? chat.id;
         await prisma.whatsAppChat.updateMany({
-          where: { accountId: this.accountId, jid: chat.id },
+          where: { accountId: this.accountId, jid },
           data: chatPatch(chat),
         });
       }
       await emitEvent(this.accountId, 'chat.updated', json(chats));
     });
-    this.on(socket, 'chats.delete', async (jids) => {
+    this.on(socket, 'chats.delete', async (raw) => {
+      const jids = await Promise.all(raw.map(async (jid) => await this.identity.canonical(jid) ?? jid));
       await prisma.whatsAppChat.deleteMany({ where: { accountId: this.accountId, jid: { in: jids } } });
       await emitEvent(this.accountId, 'chat.deleted', { jids });
     });
@@ -373,8 +410,10 @@ export class BaileysSession {
     this.on(socket, 'contacts.update', async (contacts) => {
       for (const contact of contacts) {
         if (!contact.id) continue;
+        await this.identity.learnAll(contactPairs(contact), 'contact');
+        const jid = await this.identity.canonical(contact.id) ?? contact.id;
         await prisma.whatsAppContact.updateMany({
-          where: { accountId: this.accountId, jid: contact.id },
+          where: { accountId: this.accountId, jid },
           data: contactPatch(contact),
         });
       }
@@ -386,14 +425,19 @@ export class BaileysSession {
     // cannot be routed on chat_jid like everything else. Emit the two moments a
     // consumer actually acts on, in the normal envelope: someone is calling, and
     // the call is over.
+    this.on(socket, 'lid-mapping.update', (mapping) => this.identity.learn(pairOf(mapping.lid, mapping.pn), 'lid-mapping'));
     this.on(socket, 'call', async (calls) => {
       for (const call of calls) {
+        await this.identity.learnAll(
+          [pairOf(call.from, call.callerPn), pairOf(call.chatId, call.callerPn)].filter((pair): pair is LidPair => pair !== null),
+          'call',
+        );
         const terminal = call.status === 'terminate' || call.status === 'timeout' || call.status === 'reject';
         if (call.status !== 'offer' && !terminal) continue;
         await emitEvent(this.accountId, terminal ? 'call.ended' : 'call.received', {
           id: call.id,
-          chat_jid: call.chatId,
-          caller_jid: call.from,
+          chat_jid: await this.identity.canonical(call.chatId) ?? call.chatId,
+          caller_jid: await this.identity.canonical(call.from) ?? call.from,
           caller_phone: call.callerPn ?? null,
           is_video: call.isVideo ?? false,
           is_group: call.isGroup ?? false,
@@ -424,7 +468,8 @@ export class BaileysSession {
     });
     this.on(socket, 'messages.delete', async (deletion) => {
       if ('all' in deletion) {
-        await prisma.whatsAppMessage.updateMany({ where: { accountId: this.accountId, chatJid: deletion.jid }, data: { status: 'deleted' } });
+        const chatJid = await this.identity.canonical(deletion.jid) ?? deletion.jid;
+        await prisma.whatsAppMessage.updateMany({ where: { accountId: this.accountId, chatJid }, data: { status: 'deleted' } });
       } else {
         const ids = deletion.keys.map((key) => key.id).filter((value): value is string => Boolean(value));
         await prisma.whatsAppMessage.updateMany({ where: { accountId: this.accountId, whatsappMessageId: { in: ids } }, data: { status: 'deleted' } });
@@ -499,11 +544,13 @@ export class BaileysSession {
   private async upsertChats(chats: Chat[]) {
     for (const chat of chats) {
       if (!chat.id) continue;
+      await this.identity.learnAll(chatPairs(chat), 'chat');
+      const jid = await this.identity.canonical(chat.id) ?? chat.id;
       await prisma.whatsAppChat.upsert({
-        where: { accountId_jid: { accountId: this.accountId, jid: chat.id } },
+        where: { accountId_jid: { accountId: this.accountId, jid } },
         create: {
           accountId: this.accountId,
-          jid: chat.id,
+          jid,
           name: chat.name ?? null,
           unreadCount: chat.unreadCount ?? 0,
           archived: chat.archived ?? false,
@@ -517,17 +564,22 @@ export class BaileysSession {
 
   private async upsertContacts(contacts: Contact[]) {
     for (const contact of contacts) {
+      if (!contact.id) continue;
+      await this.identity.learnAll(contactPairs(contact), 'contact');
+      const jid = await this.identity.canonical(contact.id) ?? contact.id;
+      // A LID's user part is not a phone number; only record one we actually know.
+      const phoneNumber = isPhoneJid(jid) ? jid.split('@')[0] ?? null : null;
       await prisma.whatsAppContact.upsert({
-        where: { accountId_jid: { accountId: this.accountId, jid: contact.id } },
+        where: { accountId_jid: { accountId: this.accountId, jid } },
         create: {
           accountId: this.accountId,
-          jid: contact.id,
+          jid,
           name: contact.name ?? null,
           notify: contact.notify ?? null,
-          phoneNumber: contact.id.split('@')[0] ?? null,
+          phoneNumber,
           metadata: json(contact),
         },
-        update: contactPatch(contact),
+        update: { ...contactPatch(contact), ...(phoneNumber ? { phoneNumber } : {}) },
       });
     }
     if (contacts.length) await emitEvent(this.accountId, 'contact.updated', { count: contacts.length });
@@ -572,9 +624,43 @@ export class BaileysSession {
     await emitEvent(this.accountId, 'group.updated', { jid: group.id, subject: group.subject });
   }
 
+  /**
+   * A message is proof a conversation exists, even when WhatsApp never sent a
+   * `chats.upsert` for it (replies arriving under a LID did not). Create the
+   * chat row if missing, and keep the sender's push name as their contact
+   * name — for most contacts that is the only name WhatsApp ever reveals.
+   */
+  private async ensureConversation(chatJid: string, senderJid: string | null, message: WAMessage) {
+    if (!isConversationJid(chatJid)) return;
+    await prisma.whatsAppChat.upsert({
+      where: { accountId_jid: { accountId: this.accountId, jid: chatJid } },
+      create: { accountId: this.accountId, jid: chatJid },
+      update: {},
+    });
+    const pushName = message.pushName?.trim();
+    if (message.key.fromMe || !pushName || !senderJid || !(isPhoneJid(senderJid) || isLidJid(senderJid))) return;
+    await prisma.whatsAppContact.upsert({
+      where: { accountId_jid: { accountId: this.accountId, jid: senderJid } },
+      create: {
+        accountId: this.accountId,
+        jid: senderJid,
+        notify: pushName,
+        phoneNumber: isPhoneJid(senderJid) ? senderJid.split('@')[0] ?? null : null,
+      },
+      update: { notify: pushName },
+    });
+  }
+
   private async persistMessage(message: WAMessage, emit: boolean) {
-    const chatJid = message.key.remoteJid;
-    if (!chatJid || !message.key.id) return;
+    const rawChatJid = message.key.remoteJid;
+    if (!rawChatJid || !message.key.id) return;
+    // The key itself usually says who a LID is (`remoteJidAlt`/`participantAlt`).
+    await this.identity.learnAll(pairsFromKey(message.key), 'message');
+    const chatJid = await this.identity.canonical(rawChatJid) ?? rawChatJid;
+    const senderJid = message.key.participant
+      ? await this.identity.canonical(message.key.participant)
+      : (message.key.fromMe ? null : chatJid);
+    await this.ensureConversation(chatJid, senderJid, message);
     const stored = await prisma.whatsAppMessage.upsert({
       where: { accountId_whatsappMessageId: { accountId: this.accountId, whatsappMessageId: message.key.id } },
       create: {
@@ -582,7 +668,7 @@ export class BaileysSession {
         accountId: this.accountId,
         whatsappMessageId: message.key.id,
         chatJid,
-        senderJid: message.key.participant ?? (message.key.fromMe ? null : chatJid),
+        senderJid,
         direction: message.key.fromMe ? 'outbound' : 'inbound',
         messageType: getContentType(message.message ?? undefined) ?? 'unknown',
         text: messageText(message),
@@ -590,7 +676,7 @@ export class BaileysSession {
         status: 'received',
         messageTimestamp: unixDate(message.messageTimestamp),
       },
-      update: { payload: json(message), text: messageText(message) },
+      update: { payload: json(message), text: messageText(message), chatJid, senderJid },
     });
     if (emit) {
       const surface = isGroupJid(stored.chatJid) ? 'group.' : '';

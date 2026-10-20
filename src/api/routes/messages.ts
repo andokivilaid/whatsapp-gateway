@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireAuth, type GatewayVariables } from '../../auth/middleware.js';
 import { prisma } from '../../db/prisma.js';
 import { accountFor, body, dateQuery, dispatchCommand, limitQuery } from '../helpers.js';
+import { canonicalJidFor } from '../../baileys/jid-identity.js';
 
 const app = new Hono<{ Variables: GatewayVariables }>();
 
@@ -11,14 +12,17 @@ app.get('/v1/accounts/:accountId/messages', requireAuth({ resource: 'messages', 
   const account = await accountFor(context.get('actor'), context.req.param('accountId'));
   const limit = limitQuery(context.req.query('limit'), 50, 200);
   const before = context.req.query('before');
-  const chatJid = context.req.query('chat_jid');
+  // A caller may hold either address for a 1:1 contact; both name one stored chat.
+  const rawChatJid = context.req.query('chat_jid');
+  const chatJid = rawChatJid ? await canonicalJidFor(prisma, account.id, rawChatJid) : undefined;
   const since = dateQuery(context.req.query('since'), 'since');
   const beforeDate = dateQuery(before, 'before');
   const unreadOnly = context.req.query('unread') === 'true';
   const direction = context.req.query('direction');
   const messageStatus = context.req.query('status');
   const messageType = context.req.query('type');
-  const senderJid = context.req.query('sender_jid');
+  const rawSenderJid = context.req.query('sender_jid');
+  const senderJid = rawSenderJid ? await canonicalJidFor(prisma, account.id, rawSenderJid) : undefined;
   const search = context.req.query('q');
   const messageId = context.req.query('message_id');
   const unreadChatIds = unreadOnly
