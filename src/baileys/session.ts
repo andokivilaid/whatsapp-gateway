@@ -22,6 +22,7 @@ import { passthroughEvents } from '../services/event-types.js';
 import { createPostgresAuthState } from './auth-state.js';
 import { createProxyAgent, installGlobalProxyDispatcher, redactProxy } from './proxy.js';
 import { describeMessage } from './message-facts.js';
+import { needsTranscode, toVoiceNote } from '../api/transcode.js';
 import { resolveWaVersion } from './wa-version.js';
 import { resolveMessageStatus } from './message-status.js';
 import { JidIdentity, isLidJid, isPhoneJid, pairOf, pairsFromKey, phoneJidFrom, type LidPair } from './jid-identity.js';
@@ -867,8 +868,17 @@ export class BaileysSession {
           where: { id: uploadId, accountId: this.accountId },
         });
         if (!upload) throw new Error('Staged media upload was not found (it may already have been sent)');
-        const buffer = Buffer.from(upload.bytes);
-        const mimetype = upload.mimetype;
+        let buffer: Buffer = Buffer.from(upload.bytes);
+        let mimetype = upload.mimetype;
+        if (upload.kind === 'audio' && upload.voice && !needsTranscode(mimetype)) {
+          // Sent as mp3/wav, a "voice note" shows up as a plain audio file; convert it.
+          try {
+            buffer = await toVoiceNote(buffer);
+            mimetype = 'audio/ogg; codecs=opus';
+          } catch (error) {
+            logger.warn({ err: error, uploadId }, 'Voice note transcode failed; sending the original audio');
+          }
+        }
         const caption = upload.caption ?? undefined;
         const fileName = upload.filename || 'file';
         const kind = upload.kind;

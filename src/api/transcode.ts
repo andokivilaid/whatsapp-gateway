@@ -31,6 +31,30 @@ export function needsTranscode(mimetype: string | null | undefined): boolean {
  * failure modes (cleanup, permissions, disk pressure) for nothing.
  */
 export async function toMp3(input: Buffer): Promise<Buffer> {
+  return ffmpegPipe(input, [
+    '-ac', '1',           // voice notes are mono; keep them that way
+    '-b:a', '64k',        // speech, not music
+    '-f', 'mp3',
+  ]);
+}
+
+/**
+ * The other direction: WhatsApp only shows audio as a real voice note (play
+ * button, waveform, "recorded" look) when it is ogg/opus, 48 kHz mono. TTS
+ * engines hand back mp3 or wav, so outgoing voice notes are converted here.
+ */
+export async function toVoiceNote(input: Buffer): Promise<Buffer> {
+  return ffmpegPipe(input, [
+    '-ac', '1',
+    '-ar', '48000',
+    '-c:a', 'libopus',
+    '-b:a', '32k',
+    '-application', 'voip',
+    '-f', 'ogg',
+  ]);
+}
+
+async function ffmpegPipe(input: Buffer, outputArgs: string[]): Promise<Buffer> {
   if (input.length > MAX_INPUT_BYTES) {
     throw new TranscodeError('Audio is too large to transcode');
   }
@@ -41,9 +65,7 @@ export async function toMp3(input: Buffer): Promise<Buffer> {
       '-i', 'pipe:0',
       '-vn',
       '-map_metadata', '-1',
-      '-ac', '1',           // voice notes are mono; keep them that way
-      '-b:a', '64k',        // speech, not music
-      '-f', 'mp3',
+      ...outputArgs,
       'pipe:1',
     ]);
 

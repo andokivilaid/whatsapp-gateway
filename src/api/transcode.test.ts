@@ -1,5 +1,6 @@
+import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
-import { needsTranscode } from './transcode.js';
+import { needsTranscode, toVoiceNote } from './transcode.js';
 
 /**
  * WhatsApp sends voice notes as `audio/ogg; codecs=opus`. Model audio inputs
@@ -19,5 +20,17 @@ describe('needsTranscode', () => {
     for (const type of ['audio/mpeg', 'audio/mp4', 'audio/wav', 'image/jpeg', 'application/pdf', null, undefined, '']) {
       expect(needsTranscode(type)).toBe(false);
     }
+  });
+});
+
+const hasFfmpeg = spawnSync('ffmpeg', ['-version']).status === 0;
+
+/** TTS gives mp3; WhatsApp shows a voice note only for ogg/opus. */
+describe.skipIf(!hasFfmpeg)('toVoiceNote', () => {
+  it('turns mp3 into an ogg/opus voice note', async () => {
+    const mp3 = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-f', 'mp3', 'pipe:1']).stdout;
+    const ogg = await toVoiceNote(mp3);
+    expect(ogg.subarray(0, 4).toString('latin1')).toBe('OggS');
+    expect(ogg.includes(Buffer.from('OpusHead'))).toBe(true);
   });
 });
