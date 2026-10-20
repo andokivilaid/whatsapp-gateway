@@ -14,7 +14,11 @@ app.get('/v1/accounts/:accountId/chats', requireAuth({ resource: 'messages', act
   return context.json({ data: await prisma.whatsAppChat.findMany({
     where: {
       accountId: account.id,
-      ...(query ? { OR: [{ name: { contains: query, mode: 'insensitive' } }, { jid: { contains: query, mode: 'insensitive' } }] } : {}),
+      ...(query ? { OR: [
+        { name: { contains: query, mode: 'insensitive' } },
+        { jid: { contains: query, mode: 'insensitive' } },
+        { alternateJid: { contains: query, mode: 'insensitive' } },
+      ] } : {}),
       ...(unread === 'true' ? { unreadCount: { gt: 0 } } : {}),
       ...(archived === 'true' ? { archived: true } : archived === 'false' ? { archived: false } : {}),
     },
@@ -29,6 +33,7 @@ app.get('/v1/accounts/:accountId/contacts', requireAuth({ resource: 'contacts', 
     where: { accountId: account.id, ...(query ? { OR: [
       { name: { contains: query, mode: 'insensitive' } }, { notify: { contains: query, mode: 'insensitive' } },
       { phoneNumber: { contains: query } }, { jid: { contains: query, mode: 'insensitive' } },
+      { alternateJid: { contains: query, mode: 'insensitive' } },
     ] } : {}) },
     orderBy: { name: 'asc' },
   }) });

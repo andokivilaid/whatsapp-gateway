@@ -3,6 +3,7 @@ import { HTTPException } from 'hono/http-exception';
 import { z } from 'zod';
 import { requireAuth, type GatewayVariables } from '../../auth/middleware.js';
 import { prisma } from '../../db/prisma.js';
+import { expandEquivalentJids, messageJidWhere } from '../../baileys/jid-alias-store.js';
 import { accountFor, body, dateQuery, dispatchCommand, limitQuery } from '../helpers.js';
 
 const app = new Hono<{ Variables: GatewayVariables }>();
@@ -22,17 +23,27 @@ app.get('/v1/accounts/:accountId/messages', requireAuth({ resource: 'messages', 
   const search = context.req.query('q');
   const messageId = context.req.query('message_id');
   const unreadChatIds = unreadOnly
-    ? (await prisma.whatsAppChat.findMany({ where: { accountId: account.id, unreadCount: { gt: 0 } }, select: { jid: true } })).map((chat) => chat.jid)
+    ? (await prisma.whatsAppChat.findMany({ where: { accountId: account.id, unreadCount: { gt: 0 } }, select: { jid: true, alternateJid: true } }))
+        .flatMap((chat) => [chat.jid, chat.alternateJid].filter((jid): jid is string => Boolean(jid)))
     : undefined;
+  const chatJids = chatJid ? await expandEquivalentJids(account.id, [chatJid]) : undefined;
+  const senderJids = senderJid ? await expandEquivalentJids(account.id, [senderJid]) : undefined;
+  const unreadJids = unreadChatIds ? await expandEquivalentJids(account.id, unreadChatIds) : undefined;
+  // JID filters are OR-clauses (canonical or alternate). Combine them with AND so
+  // a chat filter is not replaced by the message-id filter, which is also an OR.
+  const jidConstraints = [
+    ...(chatJids ? [messageJidWhere(chatJids)] : []),
+    ...(unreadJids ? [messageJidWhere(unreadJids)] : []),
+    ...(unreadJids && !direction ? [{ direction: 'inbound' as const }] : []),
+  ];
   const messages = await prisma.whatsAppMessage.findMany({
     where: {
       accountId: account.id,
-      ...(chatJid ? { chatJid } : {}),
-      ...(unreadChatIds ? { chatJid: { in: unreadChatIds }, direction: 'inbound' } : {}),
+      ...(jidConstraints.length ? { AND: jidConstraints } : {}),
       ...(direction ? { direction } : {}),
       ...(messageStatus ? { status: messageStatus } : {}),
       ...(messageType ? { messageType } : {}),
-      ...(senderJid ? { senderJid } : {}),
+      ...(senderJids ? { senderJid: { in: senderJids } } : {}),
       ...(search ? { text: { contains: search, mode: 'insensitive' as const } } : {}),
       ...(messageId ? { OR: [{ id: messageId }, { whatsappMessageId: messageId }] } : {}),
       ...((beforeDate || since) ? { messageTimestamp: { ...(beforeDate ? { lt: beforeDate } : {}), ...(since ? { gte: since } : {}) } } : {}),

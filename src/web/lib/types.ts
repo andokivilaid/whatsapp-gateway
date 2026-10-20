@@ -119,6 +119,8 @@ export type Chat = {
   name: string | null;
   unreadCount: number;
   archived: boolean;
+  /** LID when `jid` is the phone JID, or the reverse. */
+  alternateJid?: string | null;
   updatedAt: string;
 };
 
@@ -128,6 +130,7 @@ export type Contact = {
   name: string | null;
   notify: string | null;
   phoneNumber: string | null;
+  alternateJid?: string | null;
   updatedAt: string;
 };
 
@@ -145,6 +148,7 @@ export type Message = {
   accountId: string;
   whatsappMessageId: string | null;
   chatJid: string;
+  alternateChatJid?: string | null;
   senderJid: string | null;
   direction: 'inbound' | 'outbound' | string;
   messageType: string;

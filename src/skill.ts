@@ -183,7 +183,7 @@ Use a connection-scoped key for an agent controlling one WhatsApp number. Accoun
 - \`GET /v1/accounts/{accountId}/chats\`
 - \`GET /v1/accounts/{accountId}/contacts\`
 - \`GET /v1/accounts/{accountId}/groups\`
-- \`GET /v1/accounts/{accountId}/messages\` — add \`q\` to full-text search message text
+- \`GET /v1/accounts/{accountId}/messages\` — add \`q\` to full-text search message text. \`chat_jid\` matches either the phone JID or its \`@lid\` alias. Rows include \`alternateChatJid\` when the other JID is known. Direct chats are stored under the phone JID once that mapping exists.
 - \`GET /v1/accounts/{accountId}/messages/{messageId}/media\` — download decrypted image/video/audio/document bytes (add \`?download=1\` to force a file download)
 - \`POST /v1/accounts/{accountId}/messages/media\` — send a local file (multipart/form-data: \`to\`, \`file\`, optional \`caption\`/\`kind\`)
 - \`POST /v1/accounts/{accountId}/messages/{messageId}/reaction\` — react with an emoji
@@ -218,6 +218,8 @@ Convenience aliases remain available for message sending and group operations:
 - \`GET /v1/webhook-deliveries\`
 - \`GET /v1/webhook-deliveries/{deliveryId}\`
 - \`POST /v1/webhook-deliveries/{deliveryId}/replay\`
+
+\`message.received\`, \`message.sent\`, and the reaction variants keep their existing fields. \`chat_jid\` is the canonical phone JID when a LID mapping is known (it used to be the raw \`remoteJid\`, often \`@lid\`, for inbound messages). Those events also include \`chat_jid_alt\` (the other JID, or null). \`message.updated\` is still the raw Baileys update; the stored message status does not move backwards when a late receipt arrives.
 
 ## Discovery
 

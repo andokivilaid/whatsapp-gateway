@@ -404,7 +404,7 @@ export const gatewayTools: GatewayToolDefinition[] = [
   tool({
     name: 'whatsapp_chats_search',
     title: 'Search WhatsApp chats',
-    description: 'List synchronized chats with optional name/JID, unread, and archived filters.',
+    description: 'List synchronized chats with optional name/JID, unread, and archived filters. A direct chat is one row under the phone JID when a LID mapping is known; q also matches alternateJid.',
     inputSchema: z.object({
       account_id: accountId,
       query: z.string().max(300).optional(),
@@ -421,7 +421,7 @@ export const gatewayTools: GatewayToolDefinition[] = [
   tool({
     name: 'whatsapp_contacts_search',
     title: 'Search WhatsApp contacts',
-    description: 'Search synchronized WhatsApp contacts by name, phone number, or JID.',
+    description: 'Search synchronized WhatsApp contacts by name, phone number, JID, or LID alias.',
     inputSchema: z.object({ account_id: accountId, query: z.string().max(300).optional() }),
     annotations: readOnly(),
     confirmation: 'none',
@@ -433,7 +433,7 @@ export const gatewayTools: GatewayToolDefinition[] = [
   tool({
     name: 'whatsapp_messages_search',
     title: 'Search WhatsApp messages',
-    description: 'Search durable synchronized messages using chat, text, direction, type, sender, unread, and time filters.',
+    description: 'Search durable synchronized messages using chat, text, direction, type, sender, unread, and time filters. chat_jid and sender_jid match either the phone JID or its LID alias.',
     inputSchema: z.object({
       account_id: accountId,
       chat_jid: z.string().max(200).optional(),

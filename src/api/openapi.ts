@@ -390,7 +390,13 @@ export const openApiDocument = {
       delete: { tags: ['Pairing'], summary: 'Log out and delete the linked-device session', parameters: [accountParameter, idempotencyParameter], responses: { '200': commandResponse('Disconnect reached a terminal state'), '202': commandResponse('Disconnect is queued') } },
     },
     '/v1/accounts/{accountId}/chats': {
-      get: { tags: ['Messages'], summary: 'List synchronized chats', parameters: [accountParameter, { name: 'q', in: 'query', schema: { type: 'string' } }, { name: 'unread', in: 'query', schema: { type: 'boolean' } }, { name: 'archived', in: 'query', schema: { type: 'boolean' } }], responses: { '200': { description: 'Chats' } } },
+      get: {
+        tags: ['Messages'],
+        summary: 'List synchronized chats',
+        description: 'One row per person. Direct chats use the phone JID when a LID mapping is known, and `alternateJid` carries the other JID. `q` matches name, jid, or alternateJid.',
+        parameters: [accountParameter, { name: 'q', in: 'query', schema: { type: 'string' } }, { name: 'unread', in: 'query', schema: { type: 'boolean' } }, { name: 'archived', in: 'query', schema: { type: 'boolean' } }],
+        responses: { '200': { description: 'Chats' } },
+      },
     },
     '/v1/accounts/{accountId}/contacts': {
       get: { tags: ['Messages'], summary: 'List synchronized contacts', parameters: [accountParameter, { name: 'q', in: 'query', schema: { type: 'string' } }], responses: { '200': { description: 'Contacts' } } },
@@ -399,7 +405,7 @@ export const openApiDocument = {
       get: {
         tags: ['Messages'], summary: 'List synchronized messages', parameters: [
           accountParameter,
-          { name: 'chat_jid', in: 'query', schema: { type: 'string' } },
+          { name: 'chat_jid', in: 'query', schema: { type: 'string' }, description: 'Phone JID or LID. Both match the same canonical thread. Rows include alternateChatJid when the other JID is known.' },
           { name: 'before', in: 'query', schema: { type: 'string', format: 'date-time' } },
           { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 200, default: 50 } },
           { name: 'unread', in: 'query', schema: { type: 'boolean' } },

@@ -144,6 +144,7 @@ model WhatsAppAccount {
   signalKeys           WhatsAppSignalKey[]
   chats                WhatsAppChat[]
   contacts             WhatsAppContact[]
+  jidAliases           WhatsAppJidAlias[]
   groups               WhatsAppGroup[]
   messages             WhatsAppMessage[]
   eventSequence        AccountEventSequence?
@@ -227,33 +228,53 @@ model WhatsAppSignalKey {
 }
 
 model WhatsAppChat {
-  accountId   String
-  jid         String
-  name        String?
-  unreadCount Int             @default(0)
-  archived    Boolean         @default(false)
-  metadata    Json            @default("{}")
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  account     WhatsAppAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId    String
+  jid          String
+  name         String?
+  unreadCount  Int             @default(0)
+  archived     Boolean         @default(false)
+  /// The other direct-chat JID for this person, usually the `@lid` when `jid` is the phone JID.
+  alternateJid String?
+  metadata     Json            @default("{}")
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  account      WhatsAppAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@id([accountId, jid])
   @@map("whatsapp_chats")
 }
 
 model WhatsAppContact {
-  accountId   String
-  jid         String
-  name        String?
-  notify      String?
-  phoneNumber String?
-  metadata    Json            @default("{}")
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  account     WhatsAppAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId    String
+  jid          String
+  name         String?
+  notify       String?
+  phoneNumber  String?
+  /// The other direct-chat JID for this person, usually the `@lid` when `jid` is the phone JID.
+  alternateJid String?
+  metadata     Json            @default("{}")
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  account      WhatsAppAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@id([accountId, jid])
   @@map("whatsapp_contacts")
+}
+
+/// LID ↔ phone mapping learned from message keys and Baileys LID events.
+/// `jid` is the non-canonical id (the LID). `canonicalJid` is the phone JID
+/// messages and chats are stored under.
+model WhatsAppJidAlias {
+  accountId    String
+  jid          String
+  canonicalJid String
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  account      WhatsAppAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@id([accountId, jid])
+  @@index([accountId, canonicalJid])
+  @@map("whatsapp_jid_aliases")
 }
 
 model WhatsAppGroup {
@@ -276,6 +297,8 @@ model WhatsAppMessage {
   accountId         String
   whatsappMessageId String?
   chatJid           String
+  /// The other JID for this direct chat. Null for groups and for chats whose LID is still unknown.
+  alternateChatJid  String?
   senderJid         String?
   direction         String
   messageType       String
@@ -288,6 +311,7 @@ model WhatsAppMessage {
 
   @@unique([accountId, whatsappMessageId])
   @@index([accountId, chatJid, messageTimestamp])
+  @@index([accountId, alternateChatJid])
   @@map("whatsapp_messages")
 }
 

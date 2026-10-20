@@ -59,7 +59,8 @@
     "mcp": "tsx src/mcp-stdio.ts",
     "smoke:curl": "bash scripts/smoke.sh",
     "skill:validate": "node scripts/validate-skill.mjs",
-    "wag": "tsx src/cli.ts"
+    "wag": "tsx src/cli.ts",
+    "backfill:jid-aliases": "tsx src/scripts/backfill-jid-aliases.ts"
   },
   "dependencies": {
     "@better-auth/api-key": "1.6.23",
