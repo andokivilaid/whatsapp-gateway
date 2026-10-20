@@ -399,14 +399,14 @@ export const openApiDocument = {
       get: {
         tags: ['Messages'], summary: 'List synchronized messages', parameters: [
           accountParameter,
-          { name: 'chat_jid', in: 'query', schema: { type: 'string' } },
+          { name: 'chat_jid', in: 'query', schema: { type: 'string' }, description: 'Phone JID, @lid or group JID. A @lid with a known phone pairing resolves to the same chat as the phone JID.' },
           { name: 'before', in: 'query', schema: { type: 'string', format: 'date-time' } },
           { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 200, default: 50 } },
           { name: 'unread', in: 'query', schema: { type: 'boolean' } },
           { name: 'direction', in: 'query', schema: { type: 'string', enum: ['inbound', 'outbound'] } },
           { name: 'status', in: 'query', schema: { type: 'string' } },
           { name: 'type', in: 'query', schema: { type: 'string' } },
-          { name: 'sender_jid', in: 'query', schema: { type: 'string' } },
+          { name: 'sender_jid', in: 'query', schema: { type: 'string' }, description: 'Phone JID or @lid; resolved like chat_jid.' },
           { name: 'message_id', in: 'query', schema: { type: 'string' }, description: 'Exact match on the gateway or WhatsApp message id' },
           { name: 'since', in: 'query', schema: { type: 'string', format: 'date-time' } },
         ], responses: { '200': { description: 'Messages and pagination cursor' } },

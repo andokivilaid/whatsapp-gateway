@@ -144,6 +144,7 @@ model WhatsAppAccount {
   signalKeys           WhatsAppSignalKey[]
   chats                WhatsAppChat[]
   contacts             WhatsAppContact[]
+  jidAliases           WhatsAppJidAlias[]
   groups               WhatsAppGroup[]
   messages             WhatsAppMessage[]
   eventSequence        AccountEventSequence?
@@ -254,6 +255,24 @@ model WhatsAppContact {
 
   @@id([accountId, jid])
   @@map("whatsapp_contacts")
+}
+
+/// One person, two addresses. WhatsApp's privacy addressing reports a contact
+/// as `<n>@lid` while sends go to `<phone>@s.whatsapp.net`; without this map
+/// the same conversation is stored as two chats. Chats, contacts and messages
+/// are keyed by the phone JID whenever it is known.
+model WhatsAppJidAlias {
+  accountId String
+  lid       String
+  pnJid     String
+  source    String
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  account   WhatsAppAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@id([accountId, lid])
+  @@index([accountId, pnJid])
+  @@map("whatsapp_jid_aliases")
 }
 
 model WhatsAppGroup {
