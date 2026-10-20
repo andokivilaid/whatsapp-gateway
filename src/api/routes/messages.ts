@@ -81,6 +81,9 @@ app.post('/v1/accounts/:accountId/messages', requireAuth({ resource: 'messages',
     to: z.string().min(3),
     text: z.string().optional(),
     content: z.record(z.string(), z.unknown()).optional(),
+    // Reply to a stored message: gateway id (`msg_…`) or WhatsApp message id.
+    // Resolved by the worker; an unknown id sends unquoted rather than failing.
+    quoted_message_id: z.string().min(1).optional(),
   }).refine((value) => value.text !== undefined || value.content !== undefined, 'text or content is required'));
   assertUsableMedia(input.content);
   const actor = context.get('actor');

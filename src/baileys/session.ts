@@ -10,6 +10,7 @@ import {
   type GroupMetadata,
   type WASocket,
   type WAMessage,
+  type WAMessageContent,
 } from 'baileys';
 import type { Prisma } from '@prisma/client';
 import QRCode from 'qrcode';
@@ -21,7 +22,9 @@ import { emitEvent } from '../services/events.js';
 import { passthroughEvents } from '../services/event-types.js';
 import { createPostgresAuthState } from './auth-state.js';
 import { createProxyAgent, installGlobalProxyDispatcher, redactProxy } from './proxy.js';
-import { describeMessage } from './message-facts.js';
+import { describeMessage, unwrapContent } from './message-facts.js';
+import { decryptPollVoteAny, jidCandidates, pollCreation, selectedPollOptions } from './poll-votes.js';
+import { findStoredMessage, storedWAMessage } from './stored-message.js';
 import { needsTranscode, toVoiceNote } from '../api/transcode.js';
 import { resolveWaVersion } from './wa-version.js';
 import { resolveMessageStatus } from './message-status.js';
@@ -36,6 +39,8 @@ const MAX_COMMAND_ATTEMPTS = 5;
 
 type PostgresAuthState = Awaited<ReturnType<typeof createPostgresAuthState>>;
 type PairingAccount = { pairingMode: string | null; pairingExpiresAt: Date | null };
+type StoredMessageRow = { id: string; whatsappMessageId: string | null; chatJid: string; senderJid: string | null; messageTimestamp: Date };
+type MessageKey = WAMessage['key'];
 
 function json(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value, BufferJSON.replacer)) as Prisma.InputJsonValue;
@@ -258,8 +263,7 @@ export class BaileysSession {
           select: { payload: true },
         });
         if (!stored) return undefined;
-        const revived = JSON.parse(JSON.stringify(stored.payload), BufferJSON.reviver) as WAMessage;
-        return revived.message ?? undefined;
+        return storedWAMessage(stored.payload).message ?? undefined;
       },
     });
 
@@ -705,6 +709,13 @@ export class BaileysSession {
       // Emitting them woke consumers ~880 times in production with nothing to
       // answer (592 `unknown`, 288 `protocolMessage`).
       if (!facts.user_content) return;
+      // A poll vote is likewise not a message: it is an encrypted pick of
+      // options on a poll we hold. Emit what was picked, never message.received.
+      const pollUpdate = unwrapContent(message.message)?.pollUpdateMessage;
+      if (pollUpdate) {
+        await this.emitPollVote(message, pollUpdate, stored, surface);
+        return;
+      }
       const reaction = message.message?.reactionMessage;
       if (reaction) {
         await emitEvent(this.accountId, `${surface}message.reaction.${action}`, {
@@ -745,6 +756,91 @@ export class BaileysSession {
         timestamp: stored.messageTimestamp.toISOString(),
       });
     }
+  }
+
+  /** Who wrote a message, as WhatsApp may address them: phone JID and/or LID. */
+  private keyAuthors(key: MessageKey | null | undefined, participant?: string | null): (string | null | undefined)[] {
+    if (!key) return [];
+    if (key.fromMe) return [this.socket?.user?.id, this.socket?.user?.lid];
+    const author = key.participant ?? participant;
+    return author ? [key.participantAlt, author] : [key.remoteJidAlt, key.remoteJid];
+  }
+
+  /** `jids` plus the other address of each (LID ↔ phone) that we know of. */
+  private async withAlternates(jids: (string | null | undefined)[]): Promise<string[]> {
+    const candidates = jidCandidates(...jids);
+    const extra: (string | null | undefined)[] = [];
+    for (const jid of candidates) {
+      if (isLidJid(jid)) extra.push(await this.identity.canonical(jid));
+      if (isPhoneJid(jid)) {
+        const alias = await prisma.whatsAppJidAlias.findFirst({ where: { accountId: this.accountId, pnJid: jid }, select: { lid: true } });
+        extra.push(alias?.lid ?? await this.socket?.signalRepository?.lidMapping?.getLIDForPN(jid).catch(() => null));
+      }
+    }
+    return jidCandidates(...candidates, ...extra);
+  }
+
+  /**
+   * Decrypt an incoming poll vote against the stored poll and emit
+   * `message.poll.vote`. A vote we cannot decrypt (poll never stored, no
+   * messageSecret, no identity pairing works) is logged and dropped rather than
+   * emitted with a guessed selection.
+   */
+  private async emitPollVote(
+    message: WAMessage,
+    update: NonNullable<WAMessageContent['pollUpdateMessage']>,
+    stored: StoredMessageRow,
+    surface: string,
+  ) {
+    // Our own vote, cast from the phone: nothing for a consumer to act on.
+    if (message.key.fromMe) return;
+    const pollKey = update.pollCreationMessageKey;
+    const log = this.log.child({ voteId: stored.whatsappMessageId, pollId: pollKey?.id });
+    const poll = pollKey?.id ? await findStoredMessage(prisma, this.accountId, pollKey.id) : null;
+    const pollContent = unwrapContent(poll?.message.message);
+    const encKey = poll?.message.message?.messageContextInfo?.messageSecret ?? pollContent?.messageContextInfo?.messageSecret;
+    if (!poll || !pollKey?.id || !pollContent || !pollCreation(pollContent) || !encKey?.length || !update.vote) {
+      log.warn({ pollFound: !!poll, hasSecret: !!encKey?.length }, 'Poll vote could not be decrypted: poll creation message or its secret is not stored');
+      return;
+    }
+    const decrypted = decryptPollVoteAny(update.vote, {
+      messageId: pollKey.id,
+      encKey,
+      creatorJids: await this.withAlternates([
+        ...this.keyAuthors(poll.message.key, poll.message.participant),
+        ...this.keyAuthors(pollKey),
+      ]),
+      voterJids: await this.withAlternates(this.keyAuthors(message.key, message.participant)),
+    });
+    if (!decrypted) {
+      log.warn('Poll vote could not be decrypted with any known creator/voter identity');
+      return;
+    }
+    await emitEvent(this.accountId, `${surface}message.poll.vote`, {
+      id: stored.id,
+      whatsapp_message_id: stored.whatsappMessageId,
+      chat_jid: stored.chatJid,
+      sender_jid: stored.senderJid,
+      poll_message_id: pollKey.id,
+      poll_name: pollCreation(pollContent)?.name ?? null,
+      selected_options: selectedPollOptions(pollContent, decrypted.vote),
+      timestamp: stored.messageTimestamp.toISOString(),
+    });
+  }
+
+  /**
+   * The stored message to quote, rebuilt as a WAMessage (key + content as
+   * stored). Missing is not fatal: the reply goes out unquoted, with a warning,
+   * rather than failing a send over a reference we cannot resolve.
+   */
+  private async quotedMessage(messageId: unknown): Promise<WAMessage | undefined> {
+    if (typeof messageId !== 'string' || !messageId) return undefined;
+    const stored = await findStoredMessage(prisma, this.accountId, messageId);
+    if (!stored?.message.key?.id || !getContentType(unwrapContent(stored.message.message) ?? undefined)) {
+      this.log.warn({ quotedMessageId: messageId }, 'Quoted message not found; sending without a quote');
+      return undefined;
+    }
+    return stored.message;
   }
 
   private async processNextCommand() {
@@ -856,7 +952,8 @@ export class BaileysSession {
         const content = payload.content
           ? payload.content as Parameters<WASocket['sendMessage']>[1]
           : { text: String(payload.text ?? '') };
-        const sent = await socket.sendMessage(jid, content);
+        const quoted = await this.quotedMessage(payload.quoted_message_id);
+        const sent = await socket.sendMessage(jid, content, quoted ? { quoted } : {});
         if (sent) await this.persistMessage(sent, false);
         return { jid, message_id: sent?.key.id ?? null };
       }
@@ -888,7 +985,8 @@ export class BaileysSession {
           : kind === 'audio' ? { audio: buffer, mimetype, ptt: upload.voice }
           : kind === 'sticker' ? { sticker: buffer }
           : { document: buffer, mimetype, fileName, ...(caption ? { caption } : {}) };
-        const sent = await socket.sendMessage(jid, content as Parameters<WASocket['sendMessage']>[1]);
+        const quoted = await this.quotedMessage(payload.quoted_message_id);
+        const sent = await socket.sendMessage(jid, content as Parameters<WASocket['sendMessage']>[1], quoted ? { quoted } : {});
         if (sent) await this.persistMessage(sent, false);
         // Staged bytes are dropped only on success or terminal failure, so a
         // requeued send (socket died mid-command) still has its payload.

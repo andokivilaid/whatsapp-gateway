@@ -36,6 +36,13 @@ describe('OpenAPI document', () => {
     expect(openApiDocument.components.schemas.CommandEnvelope.properties).toHaveProperty('result');
   });
 
+  it('documents quoted replies on both send routes', () => {
+    const send = openApiDocument.paths['/v1/accounts/{accountId}/messages'].post;
+    expect(send.requestBody.content['application/json'].schema.properties).toHaveProperty('quoted_message_id');
+    const media = openApiDocument.paths['/v1/accounts/{accountId}/messages/media'].post;
+    expect(media.requestBody.content['multipart/form-data'].schema.properties).toHaveProperty('quoted_message_id');
+  });
+
   it('documents webhook failure diagnostics returned to API-key callers', () => {
     const list = openApiDocument.paths['/v1/webhook-deliveries'].get;
     expect(list.responses['200'].content['application/json'].schema)

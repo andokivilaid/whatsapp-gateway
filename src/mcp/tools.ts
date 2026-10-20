@@ -472,6 +472,8 @@ export const gatewayTools: GatewayToolDefinition[] = [
       to: z.string().min(3),
       text: z.string().max(65_000).optional(),
       content: z.record(z.string(), z.unknown()).optional(),
+      quoted_message_id: z.string().min(1).optional()
+        .describe('Reply to this stored message (gateway msg_… id or WhatsApp message id).'),
       idempotency_key: idempotencyKey,
       confirmed,
     }).refine((value) => value.text !== undefined || value.content !== undefined, 'text or content is required'),
@@ -480,7 +482,7 @@ export const gatewayTools: GatewayToolDefinition[] = [
     executor: 'whatsapp',
     execute: (client, input) => client.request('POST', `/v1/accounts/${pathPart(input.account_id)}/messages`, {
       headers: { 'idempotency-key': input.idempotency_key },
-      body: { to: input.to, text: input.text, content: input.content },
+      body: { to: input.to, text: input.text, content: input.content, quoted_message_id: input.quoted_message_id },
     }),
   }),
   tool({

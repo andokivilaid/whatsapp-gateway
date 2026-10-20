@@ -55,6 +55,10 @@ const syntheticEvents = [
   // payload carries the emoji and the message it points at.
   'message.reaction.received', 'message.reaction.sent',
   'group.message.reaction.received', 'group.message.reaction.sent',
+  // A poll vote is an encrypted selection on a poll, not a message. It is
+  // decrypted against the stored poll and emitted with the chosen option names
+  // (an empty list means the vote was withdrawn), never as message.received.
+  'message.poll.vote', 'group.message.poll.vote',
   // Incoming calls, in the gateway envelope. The raw `call.updated` passthrough
   // fires on every status transition and carries Baileys' array shape; these two
   // are the moments a consumer acts on — it is ringing, and it is over.

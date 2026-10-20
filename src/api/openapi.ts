@@ -413,7 +413,12 @@ export const openApiDocument = {
       },
       post: {
         tags: ['Messages'], summary: 'Send text or rich Baileys content', parameters: [accountParameter, idempotencyParameter],
-        requestBody: jsonBody(object({ to: { type: 'string', description: 'E.164 phone number or WhatsApp JID' }, text: { type: 'string' }, content: { type: 'object', additionalProperties: true } }, ['to'])),
+        requestBody: jsonBody(object({
+          to: { type: 'string', description: 'E.164 phone number or WhatsApp JID' },
+          text: { type: 'string' },
+          content: { type: 'object', additionalProperties: true },
+          quoted_message_id: { type: 'string', description: 'Send as a reply quoting this stored message: the gateway id (msg_…) or the WhatsApp message id. If it is not found the message is sent unquoted.' },
+        }, ['to'])),
         responses: { '200': commandResponse('Message command reached a terminal state'), '202': commandResponse('Message is durably queued'), '409': { description: 'Idempotency conflict' } },
       },
     },
@@ -438,7 +443,7 @@ export const openApiDocument = {
       post: {
         tags: ['Messages'],
         summary: 'Send a local file as media',
-        description: 'multipart/form-data upload. Fields: to (phone or JID), file (binary, max 32 MiB), optional caption, kind (image|video|audio|sticker|document, auto-detected from the MIME type), and voice=true to send audio as a voice note.',
+        description: 'multipart/form-data upload. Fields: to (phone or JID), file (binary, max 32 MiB), optional caption, kind (image|video|audio|sticker|document, auto-detected from the MIME type), voice=true to send audio as a voice note, and quoted_message_id (gateway msg_… or WhatsApp message id) to send it as a reply.',
         parameters: [accountParameter, idempotencyParameter],
         requestBody: {
           required: true,
@@ -450,6 +455,7 @@ export const openApiDocument = {
                 caption: { type: 'string' },
                 kind: { type: 'string', enum: ['image', 'video', 'audio', 'sticker', 'document'] },
                 voice: { type: 'string', enum: ['true', 'false'] },
+                quoted_message_id: { type: 'string', description: 'Quote this stored message (gateway or WhatsApp id); sent unquoted if not found.' },
               }, ['to', 'file']),
             },
           },

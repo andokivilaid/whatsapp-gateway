@@ -166,6 +166,9 @@ app.post('/v1/accounts/:accountId/messages/media', requireAuth({ resource: 'mess
   const mimetype = file.type || 'application/octet-stream';
   const kind = typeof form.kind === 'string' && form.kind ? form.kind : mediaKindFor(mimetype);
   const caption = typeof form.caption === 'string' && form.caption ? form.caption : null;
+  const quotedMessageId = typeof form.quoted_message_id === 'string' && form.quoted_message_id.trim()
+    ? form.quoted_message_id.trim()
+    : undefined;
 
   // Stage the bytes, then reference them from the durable command by id.
   const upload = await prisma.whatsAppMediaUpload.create({
@@ -183,7 +186,7 @@ app.post('/v1/accounts/:accountId/messages/media', requireAuth({ resource: 'mess
   });
 
   try {
-    return await dispatchCommand(context, account, 'message.send.media', { to, upload_id: upload.id }, 120_000);
+    return await dispatchCommand(context, account, 'message.send.media', { to, upload_id: upload.id, ...(quotedMessageId ? { quoted_message_id: quotedMessageId } : {}) }, 120_000);
   } catch (error) {
     await prisma.whatsAppMediaUpload.deleteMany({ where: { id: upload.id } });
     throw error;
