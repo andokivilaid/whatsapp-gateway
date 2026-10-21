@@ -36,6 +36,11 @@ describe('jid identity rules', () => {
     expect(pairOf('116978031300656@lid', '3725142131')).toEqual(pair);
   });
 
+  it("pairs the account's own device addresses (creds.me.lid / creds.me.id)", () => {
+    expect(pairOf('116978031300656:40@lid', '3725142131:40@s.whatsapp.net')).toEqual({ lid: '116978031300656@lid', pn: '3725142131@s.whatsapp.net' });
+    expect(pairOf(undefined, '3725142131:40@s.whatsapp.net')).toBeNull();
+  });
+
   it('refuses pairs that are not one LID plus one phone', () => {
     expect(pairOf('1@lid', '2@lid')).toBeNull();
     expect(pairOf('3725142131@s.whatsapp.net', '3725142132@s.whatsapp.net')).toBeNull();

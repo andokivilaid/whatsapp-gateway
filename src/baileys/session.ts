@@ -346,6 +346,9 @@ export class BaileysSession {
           config.RECONNECT_STABLE_SECONDS * 1_000,
         );
         this.stableConnectionTimer.unref();
+        // The account's own LID↔phone pairing: without it, the owner's "Message yourself" chat can be stored and
+        // emitted under their LID instead of their own number.
+        await this.identity.learn(pairOf(me?.lid, me?.id), 'self').catch((error) => this.log.warn({ error }, 'Failed to record own LID'));
         await emitEvent(this.accountId, 'connection.opened', { jid: me?.id, name: me?.name });
         void this.syncAllGroups();
       }
